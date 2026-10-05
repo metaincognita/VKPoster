@@ -25,6 +25,8 @@ final class SourceMigrationTest extends TestCase
         $migrator = new Migrator($db, $directory, 'migrations_sources_test');
         $incoming = require TestEnv::basePath() . '/database/migrations/2026_10_05_000021_create_source_incoming.php';
         $selection = require TestEnv::basePath() . '/database/migrations/2026_10_05_000022_create_source_selection.php';
+        $processing = require TestEnv::basePath() . '/database/migrations/2026_10_05_000023_create_source_text_processings.php';
+        $processing->down($db);
         $selection->down($db);
         $incoming->down($db);
         $migration->down($db);
@@ -46,6 +48,7 @@ final class SourceMigrationTest extends TestCase
             }
             $incoming->up($db);
             $selection->up($db);
+            $processing->up($db);
             $db->execute('DROP TABLE IF EXISTS migrations_sources_test');
             unlink($directory . '/2026_10_05_000013_create_sources.php');
             rmdir($directory);

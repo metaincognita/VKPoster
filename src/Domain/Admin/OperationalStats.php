@@ -192,6 +192,16 @@ final class OperationalStats
         return ['requests' => (int) ($row['requests'] ?? 0), 'credits' => (int) ($row['credits'] ?? 0), 'cost' => (int) ($row['cost'] ?? 0)];
     }
 
+    /** @return array<string, int> Text processing outcomes only, without source content or instructions. */
+    public function sourceText(DateTimeImmutable $from, DateTimeImmutable $to): array
+    {
+        $counts = ['processing' => 0, 'completed' => 0, 'failed' => 0, 'stale' => 0];
+        foreach ($this->db->select('SELECT status, COUNT(*) AS c FROM source_text_processings WHERE created_at >= ? AND created_at < ? GROUP BY status', [DbTime::format($from), DbTime::format($to)]) as $row) {
+            $counts[(string) $row['status']] = (int) $row['c'];
+        }
+        return $counts;
+    }
+
     /**
      * Nearest-rank percentile of an ascending list (0 for an empty one).
      *

@@ -160,6 +160,8 @@ final class SourceReaderTest extends WorkspaceTestCase
         $path = TestEnv::basePath() . '/database/migrations/2026_10_05_000021_create_source_incoming.php';
         $migration = require $path;
         $selection = require TestEnv::basePath() . '/database/migrations/2026_10_05_000022_create_source_selection.php';
+        $processing = require TestEnv::basePath() . '/database/migrations/2026_10_05_000023_create_source_text_processings.php';
+        $processing->down($this->db);
         $selection->down($this->db);
         $migration->down($this->db);
         try {
@@ -169,6 +171,7 @@ final class SourceReaderTest extends WorkspaceTestCase
             }
         } finally {
             $selection->up($this->db);
+            $processing->up($this->db);
             (new Migrator($this->db, TestEnv::basePath() . '/database/migrations'))->migrate();
         }
     }

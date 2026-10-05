@@ -341,6 +341,8 @@ return static function (Container $c, string $base): void {
         );
     });
 
+    $c->factory(\App\Integrations\Ai\TextProvider::class, static fn (Container $c): \App\Integrations\Ai\TextProvider => new \App\Integrations\Ai\FakeTextProvider(!$c->get(Config::class)->isProduction()));
+
     $c->factory(HealthCheck::class, static fn (Container $c): HealthCheck => new HealthCheck($c->get(Config::class)->env()->all()));
 
     $c->factory(Schedule::class, static function (Container $c) use ($base): Schedule {

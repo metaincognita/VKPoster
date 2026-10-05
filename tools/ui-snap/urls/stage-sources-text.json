@@ -1,0 +1,6 @@
+[
+  {"name":"source-text-needs-review","url":"/w/{ws}/sources","login_as":"test@example.com","actions":[
+    {"click":"main a:has-text('Telegram live smoke')"},
+    {"click":"main a:has-text('Открыть материал') >> nth=0"}
+  ]}
+]

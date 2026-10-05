@@ -251,9 +251,11 @@ return static function (Router $router): void {
                     $m->post('', [SourceController::class, 'create']);
                     $m->get('/{sourceId:' . $ulid . '}/edit', [SourceController::class, 'edit']);
                     $m->post('/{sourceId:' . $ulid . '}', [SourceController::class, 'update']);
+                    $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/process', [\App\Http\Controllers\Sources\ProcessingController::class, 'process'])->middleware([RateLimit::class, ['bucket' => 'source-text-processing', 'max' => 30, 'seconds' => 60]]);
                     $m->post('/{sourceId:' . $ulid . '}/selection-rules', [\App\Http\Controllers\Sources\SelectionController::class, 'rules']);
                     $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/selection', [\App\Http\Controllers\Sources\SelectionController::class, 'decide']);
                 });
+                $s->get('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}', [\App\Http\Controllers\Sources\ProcessingController::class, 'show']);
                 $s->get('/{sourceId:' . $ulid . '}', [SourceController::class, 'show'])->name('workspace.sources.show');
             });
             // Channels. Everyone who works on posts may look; connecting and changing is for owners and administrators.

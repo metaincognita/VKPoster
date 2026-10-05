@@ -94,6 +94,11 @@ final class MetricsAggregator
             [$from, $to],
         ));
 
+        // Separate text-processing outcomes; no content, credentials or fake AI billing.
+        foreach ($this->db->select('SELECT status, COUNT(*) AS c FROM source_text_processings WHERE created_at >= ? AND created_at < ? GROUP BY status', [$from, $to]) as $row) {
+            $add('source_text_attempts', (string) $row['status'], (int) $row['c']);
+        }
+
         // Money, from the ledger (the provider's side of every movement).
         foreach ($this->db->select(
             "SELECT SUBSTRING(a.code, 10) AS provider, pl.code AS plan, e.currency, SUM(e.amount) AS total FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id "

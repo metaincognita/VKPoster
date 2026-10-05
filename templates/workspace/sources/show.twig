@@ -32,6 +32,7 @@
 <p class="mt-2 text-xs text-muted">{{ t('Сработавшее правило') }}: {{ t(selection_rule_labels[item.matched_rule ?? 'rules.not_configured'] ?? 'Правила отбора') }}</p>
 <p class="mt-2 break-words whitespace-pre-wrap">{{ item.text|slice(0, 300) }}{% if item.text|length > 300 %}…{% endif %}</p>
 <p class="mt-2 break-all text-xs text-muted">{{ t('Telegram message ID') }}: {{ item.message_ids }} · {{ t('Канал ID') }}: {{ item.peer_id }}</p>
+<div class="mt-3">{{ f.button(t('Открыть материал'), href = base ~ '/' ~ source.publicId ~ '/items/' ~ item.public_id, variant = 'secondary', size = 'sm') }}</div>
 {% if can('sources.manage') %}
 <form method="post" action="{{ base }}/{{ source.publicId }}/items/{{ item.public_id }}/selection" class="mt-3 flex flex-wrap gap-3" data-source-form>
 {{ csrf_field() }}

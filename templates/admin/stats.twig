@@ -72,4 +72,8 @@
         {% else %}<p class="mt-2 text-muted">Запросов пока не было. Расход кредитов, себестоимость у провайдера и маржа появятся здесь вместе с AI-ассистентом.</p>{% endif %}
     </section>
 </div>
+<section class="mt-8 card" aria-labelledby="source-text-h"><h2 class="text-lg font-semibold" id="source-text-h">{{ t('Обработка текста источников') }}</h2>
+<p class="mt-2 text-sm text-muted">{{ t('Технические результаты обработки за выбранный период. Тексты и инструкции здесь не отображаются.') }}</p>
+<dl class="mt-3 grid gap-2">{% for status, label in {processing: 'Обрабатываются', completed: 'Готово', failed: 'Ошибки', stale: 'Устаревшие попытки'} %}<div class="flex justify-between gap-3"><dt>{{ t(label) }}</dt><dd>{{ source_text[status] }}</dd></div>{% endfor %}</dl>
+</section>
 {% endblock %}

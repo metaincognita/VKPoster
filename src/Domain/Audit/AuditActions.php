@@ -14,6 +14,10 @@ final class AuditActions
 {
     /** @var array<string, string> */
     private const LABELS = [
+        'source.text_started' => 'Начата обработка текста',
+        'source.text_completed' => 'Текст обработан',
+        'source.text_failed' => 'Ошибка обработки текста',
+        'source.text_stale' => 'Обработка текста устарела',
         'source.rules_updated' => 'Изменены правила отбора',
         'source.item_approved' => 'Материал принят вручную',
         'source.item_rejected' => 'Материал отклонён вручную',

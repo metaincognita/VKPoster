@@ -1,0 +1,43 @@
+{% extends 'layouts/app.twig' %}
+{% import 'components/display.twig' as d %}
+{% import 'components/forms.twig' as f %}
+{% set nav_current = 'sources' %}
+{% set mode_labels = {unchanged: 'Без изменений', edit: 'Лёгкая редактура', rewrite: 'Переписать', shorten: 'Сократить', custom: 'Пользовательская инструкция'} %}
+{% set status_labels = {processing: 'Обрабатывается', completed: 'Готово', failed: 'Ошибка', stale: 'Устаревшая попытка'} %}
+{% block title %}{{ t('Обработка текста') }} · {{ app_name }}{% endblock %}
+{% block content %}
+{{ d.breadcrumbs([{label: t('Источники'), href: base}, {label: source.name, href: base ~ '/' ~ source.publicId}, {label: t('Обработка текста')}]) }}
+<div class="mt-3">{{ d.page_header(t('Обработка текста'), t('Каждая попытка сохраняется отдельно. Исходный материал остаётся без изменений.')) }}</div>
+{% set original %}<p class="break-words whitespace-pre-wrap">{{ material.text }}</p>{% if material.text is empty %}<p class="text-muted">{{ t('В материале нет текста') }}</p>{% endif %}{% endset %}
+{{ d.card(t('Исходный текст'), body = original) }}
+{% set controls %}
+{{ d.alert('info', t('Демонстрационный провайдер'), t('Режимы редакции используют Fake provider: перевод и смысловое выполнение инструкции пока не подключены. Без изменений работает локально. Ограничения длины, ссылок, упоминаний и запрещённых фраз применяются во всех режимах.')) }}
+{% if selection_status != 'approved' %}<p class="mt-4">{{ t('Для обработки сначала примите материал на странице источника.') }}</p>{% endif %}
+{% if can('sources.manage') %}
+<form method="post" action="{{ base }}/{{ source.publicId }}/items/{{ material.public_id }}/process" class="mt-4 grid gap-5" data-source-form data-text-processing>
+{{ csrf_field() }}<input type="hidden" name="revision" value="{{ revision }}">
+{{ f.select('mode', t('Режим обработки'), mode_labels, value = old('mode', settings.mode), error = errors('mode')|first) }}
+{{ f.select('language', t('Язык результата'), {original: t('Язык оригинала'), ru: t('Русский'), en: t('Английский'), uk: t('Украинский'), de: t('Немецкий'), fr: t('Французский'), es: t('Испанский')}, value = old('language', settings.language), error = errors('language')|first) }}
+{{ f.input('max_length', t('Максимальная длина'), type = 'number', value = old('max_length', settings.max_length), error = errors('max_length')|first, required = true, attrs = {min: 1, max: 20000}) }}
+{{ f.select('links', t('Ссылки'), {keep: t('Сохранить'), remove: t('Удалить')}, value = old('links', settings.links), error = errors('links')|first, hint = t('Результат — обычный текст. При сохранении скрытых ссылок адрес добавляется после подписи.')) }}
+{{ f.select('source_mentions', t('Упоминания источника'), {keep: t('Сохранить'), remove: t('Удалить')}, value = old('source_mentions', settings.source_mentions), error = errors('source_mentions')|first, hint = t('Учитываются @username и ссылки на текущий источник. Упоминания других каналов сохраняются.')) }}
+{{ f.textarea('instruction', t('Пользовательская инструкция'), value = old('instruction', settings.instruction), max = 4000, error = errors('instruction')|first) }}
+{{ f.textarea('forbidden', t('Запрещённые слова и фразы'), value = old('forbidden', settings.forbidden), max = 10000, hint = t('Одна фраза на строку. Совпадения удаляются без учёта регистра, в том числе внутри слов.'), error = errors('forbidden')|first) }}
+<div>{{ f.button(t('Обработать'), type = 'submit', disabled = selection_status != 'approved') }}</div>
+</form>{% endif %}
+{% endset %}
+<div class="mt-5">{{ d.card(t('Настройки обработки'), body = controls) }}</div>
+{% set results %}
+{% if history is empty %}<p class="text-muted">{{ t('Пока нет результатов обработки') }}</p>{% else %}
+<ul class="grid gap-5">{% for attempt in history %}<li class="border-b border-line pb-4">
+<p>{{ d.badge(t(status_labels[attempt.status] ?? 'Ошибка')) }} · {{ t(mode_labels[attempt.mode] ?? 'Без изменений') }} · {{ t('Версия настроек') }} {{ attempt.settings_version }} · {{ attempt.created_at }} UTC</p>
+{% if attempt.provider == 'fake' %}<p class="mt-2 text-sm text-muted">{{ t('Демонстрационный результат Fake provider') }}</p>{% endif %}
+{% if attempt.status == 'completed' and not attempt.current %}<p class="mt-2 text-sm">{{ t('Результат сохранён для предыдущей ревизии или решения отбора. Обработайте актуальный материал.') }}</p>{% endif %}
+{% if attempt.error %}<p class="mt-2 text-bad-fg" role="alert">{{ attempt.error }}</p>{% endif %}
+{% if attempt.processed_text is not null %}<h2 class="mt-3 font-semibold">{{ t('Обработанный текст') }}</h2><p class="mt-2 break-words whitespace-pre-wrap">{{ attempt.processed_text }}</p>{% endif %}
+<details class="mt-3"><summary>{{ t('Исходный текст этой попытки') }}</summary><p class="mt-2 break-words whitespace-pre-wrap">{{ attempt.original_text }}</p></details>
+</li>{% endfor %}</ul><p class="mt-3 text-sm text-muted">{{ t('Показаны последние 50 попыток. Предыдущие результаты сохраняются.') }}</p>{% endif %}
+{% endset %}
+<div class="mt-5">{{ d.card(t('История обработки'), body = results) }}</div>
+<script src="{{ asset('js/sources.js') }}" nonce="{{ csp_nonce() }}" defer></script>
+{% endblock %}

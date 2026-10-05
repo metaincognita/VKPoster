@@ -112,3 +112,7 @@ Reader: `reader/integration.py`, одна persistent session, shared client/RPC 
 ### Live smoke 2.3.1 (завершён)
 
 QR + локальная 2FA завершены владельцем. На реальном контролируемом `@sansillusions` internal API, MTProto resolve (peer 3941678860), backfill 10 messages и HTTP ACK→commit подтверждены: 9 логических items; повторный запуск не увеличил число items/messages. Operational logs содержат IDs/статусы, без текста/credentials. После ручного consent владельца UI проверен в workspace Void: @sansillusions и все 9 материалов видны. Исправлено размещение тестовых данных: существующий Source и связанные записи перенесены из demo-workspace id=2 в Void id=1 одной транзакцией с сохранением IDs и содержимого. Изоляция workspace корректна; все 6 пунктов минимального live smoke закрыты. См. [SOURCES_PROGRESS](../../plans/SOURCES_PROGRESS.md).
+
+### Обработка текста 2.4A
+
+Добавлен отдельный [модуль обработки текста](source-text-processing.md), durable история source_text_processings, страница материала и Fake provider через существующий каталог Integrations/Ai. Обработка допускается только для current approved/revision; отбор, reader и publishing не переписаны. Настройки, исходник и результаты хранятся по попыткам отдельно от SourceItem.

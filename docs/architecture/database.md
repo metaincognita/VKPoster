@@ -12,6 +12,10 @@
 
 `UNIQUE(workspace_id, type, telegram_username)` запрещает дубликаты в одном workspace; collation `utf8mb4_unicode_ci` дополнительно защищает от разного регистра. FK `workspace_id → workspaces.id ON DELETE CASCADE`, `created_by → users.id ON DELETE SET NULL`. Связей с `channels` и постами нет. Правила отбора будут отдельным модулем/таблицами; колонки правил и статусов отбора здесь отсутствуют. Подробнее: [Sources](modules/sources.md).
 
+## Обработка текста Sources
+
+Миграция `2026_10_05_000023_create_source_text_processings.php`: `source_text_processings` — отдельная история попыток: ULID, workspace/source/item FK, revision/selection SHA-256, original/processed text, mode, settings_version и JSON snapshot, processing/completed/failed/stale, безопасная error, provider, actor, UTC created/updated/finished timestamps. UNIQUE(item_id, settings_version). Исходные items/messages и решения отбора не изменяются; rollback удаляет только историю. [Подробнее](modules/source-text-processing.md).
+
 ## Служебные таблицы
 
 `migrations(id, migration UNIQUE, batch)` — учёт применённых миграций (создаётся `Migrator`).
