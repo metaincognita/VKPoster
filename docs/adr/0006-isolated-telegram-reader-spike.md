@@ -40,3 +40,9 @@ Python/Telethon выбран по прямому заданию и для мин
 Нужна живая ручная проверка с тестовым аккаунтом; offline tests её не заменяют.
 AI/content licensing и production-масштабирование не входят в этот spike.
 Удаление прототипа не требует рефакторинга VKPoster.
+
+## Дополнение 2.3.1: QR-авторизация
+
+Отдельная команда `login-qr` использует Telethon `qr_login`, существующую session и updates; обычная `login` сохранена. Добавлена изолированная зависимость `qrcode==8.2` с PyPI hashes для локального PNG (вне PHP whitelist; применяется только в Docker spike). Pillow уже закреплена. QR/token URL существует только в памяти временного HTTP listener, публикуемого через Docker на host loopback; не пишется в файлы, логи, PHP или Git. Включены no-store, отсутствие access logs, проверка Host, CSP и защита от framing. Обновление QR — раз в 30 секунд, максимум 10 минут. Session не удаляется, не сбрасывается; используется existing state lock. Авторизованная session не требует QR. Telegram может потребовать 2FA после сканирования; только скрытый ввод в интерактивном Terminal, без phone/OTP. Это не гарантирует обход Telegram 2FA.
+
+Дополнение для 2FA: `login-qr` запускается foreground в интерактивном Terminal. `SessionPasswordNeededError` переводится в скрытый `getpass` в отдельном thread, чтобы ожидание ручного ввода не блокировало MTProto event loop. `GetPassWarning` запрещает небезопасный fallback с видимым вводом. Пароль используется только для sign_in, не идёт в HTTP/HTML, env, файлы или логи; неправильный ввод допускает до трёх попыток без нового QR. Detached запуск не используется для ручной авторизации.

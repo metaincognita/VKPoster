@@ -7,11 +7,13 @@ import json
 import logging
 import os
 import signal
+import sys
 from pathlib import Path
 
 from .auth import AuthInputError, authenticate
 from .integration import run_sources
 from .model import channel_username
+from .qr import QRDisplay, authenticate_qr
 from .service import Reader
 from .smoke import smoke_test
 from .store import Store
@@ -34,7 +36,7 @@ async def live(args, state, store):
         api_hash,
         store,
         reader.ingest,
-        enable_updates=args.command == "run",
+        enable_updates=args.command in ("run", "login-qr"),
     )
     reader.transport = transport
     stop = asyncio.Event()
@@ -43,11 +45,17 @@ async def live(args, state, store):
         loop.add_signal_handler(sig, stop.set)
     tasks = []
     try:
-        await authenticate(
-            transport.client,
-            os.environ.get("TELEGRAM_PHONE", ""),
-            interactive=args.command == "login",
-        )
+        if args.command == "login-qr":
+            with QRDisplay(args.qr_port) as display:
+                await authenticate_qr(
+                    transport.client, display, allow_password=sys.stdin.isatty()
+                )
+        else:
+            await authenticate(
+                transport.client,
+                os.environ.get("TELEGRAM_PHONE", ""),
+                interactive=args.command == "login",
+            )
         me = await transport.call(lambda: transport.client.get_me())
         if me.bot:
             raise ValueError("Use a test user account, not a bot")
@@ -55,7 +63,7 @@ async def live(args, state, store):
         if saved_account is not None and saved_account != str(me.id):
             raise ValueError("State belongs to a different test account")
         store.set("account_id", str(me.id))
-        if args.command == "login":
+        if args.command in ("login", "login-qr"):
             print("Persistent user session ready")
             return
         value = (
@@ -107,9 +115,16 @@ def main():
     parser = argparse.ArgumentParser(
         description="Изолированный read-only Telegram spike"
     )
-    parser.add_argument("command", choices=("login", "smoke", "run", "status", "sources"))
+    parser.add_argument(
+        "command", choices=("login", "login-qr", "smoke", "run", "status", "sources")
+    )
+    parser.add_argument(
+        "--qr-port", type=int, default=8765, help="Local QR listener port inside Docker"
+    )
     parser.add_argument("--channel")
-    parser.add_argument("--source-id", help="Restrict a controlled smoke run to one enabled Source")
+    parser.add_argument(
+        "--source-id", help="Restrict a controlled smoke run to one enabled Source"
+    )
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--state", default="/state")
     args = parser.parse_args()

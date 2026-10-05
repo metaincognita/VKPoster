@@ -208,3 +208,20 @@ docker run --rm -v "$PWD:/work" -w /work ghcr.io/astral-sh/ruff:0.14.1 check rea
 `tests/test_integration.py` covers albums, edits, restart, lost ACK, disabled Sources, multi-source checkpoints and HTTP ACK validation. The PHP contract test additionally requires an isolated PHP HTTP service using **app_test**, `TEST_INTERNAL_URL`, and `TEST_READER_SECRET`. Run `tests/seed_contract.php` only in the PHP app container against the test database, after the full PHP suite. It creates two enabled synthetic Sources and one disabled Source. No test connects to Telegram. The reader runtime never runs this PHP test fixture.
 
 Run the complete synthetic PHP HTTP contract after `make test` with `sh tools/telegram-reader/tests/run_php_contract.sh` from the repository root. It uses a disposable container, local port 18085 and app_test; it removes only its own container on exit.
+
+## QR login (substage 2.3.1)
+
+From this directory, with existing `.env` and reader-state volume:
+
+```bash
+docker compose build reader
+docker compose run --rm -p 127.0.0.1:18186:8765 reader login-qr
+```
+
+Open `http://localhost:18186` locally and scan using the controlled test account: Telegram → Settings → Devices → Link Desktop Device. QR refreshes every 30 seconds for at most 10 minutes; neither its token URL nor its image is written to operational logs/files. Only a local loopback port is published. The listener stops and clears its RAM image on success/failure. The existing session is reused and an authorized session skips QR. Ordinary `login` remains the fallback. No phone or OTP is used by `login-qr`. If Telegram requires 2FA, enter it only in the interactive Terminal (hidden); a noninteractive run stops safely instead. Do not scan from a different account or run another reader against the same volume during login.
+
+After successful authorization, the controlled smoke uses `sources --once --source-id SOURCE_PUBLIC_ID`; no publication or media processing occurs.
+
+### QR with Telegram 2FA
+
+Run `login-qr` **in the foreground in a local Terminal**, not via detached `-d`/background Docker execution. Compose keeps stdin/TTY attached. After QR scanning, Telegram's password requirement is handled by a hidden Terminal-only prompt; the MTProto event loop remains active while typing. No browser password form, environment variable or saved password is used. Up to three incorrect-password attempts are allowed without rescanning; an empty password stops safely. If terminal echo cannot be disabled, input is refused instead of falling back to visible stdin. An authorized session still skips all login prompts.
