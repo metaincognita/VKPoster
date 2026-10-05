@@ -1,0 +1,21 @@
+{% import 'components/forms.twig' as f %}
+{% import 'components/display.twig' as d %}
+<p class="mb-4 text-sm text-muted">{{ t('Исключения имеют приоритет. Внутри списка достаточно одного совпадения; разные условия должны выполняться одновременно. Пустые поля не ограничивают отбор. Ключевые слова ищутся как части текста без учёта регистра; хэштеги совпадают целиком.') }}</p>
+{% if not rules_configured %}<p class="mb-4 text-sm">{{ t('Пока правила не сохранены, материалы требуют проверки. Сохранение пустых правил разрешит все материалы.') }}</p>{% endif %}
+{% if can('sources.manage') %}
+<form method="post" action="{{ base }}/{{ source.publicId }}/selection-rules" class="grid gap-5" data-source-form>
+{{ csrf_field() }}
+{% for key, label in {include_keywords: 'Включающие ключевые слова', exclude_keywords: 'Исключающие ключевые слова', include_hashtags: 'Включающие хэштеги', exclude_hashtags: 'Исключающие хэштеги'} %}
+{{ f.textarea(key, t(label), value = old(key, selection_rules[key]), rows = 3, max = 10000, hint = t('Одна фраза или хэштег на строку. До 100 строк, до 100 символов в каждой.'), error = errors(key)|first) }}
+{% endfor %}
+<fieldset class="grid gap-3"><legend class="label">{{ t('Типы материалов') }}</legend>
+{% for value, label in {text: 'Текст', photo: 'Фото', album: 'Альбом'} %}{{ f.checkbox('content_types[]', t(label), checked = value in old('content_types', selection_rules.content_types), value = value, id = 'selection-type-' ~ value) }}{% endfor %}
+<p class="hint">{{ t('Если ничего не выбрано, подходят все типы.') }}</p>
+{% if errors('content_types') %}{{ d.alert('error', t('Проверьте типы материалов'), errors('content_types')|first) }}{% endif %}
+</fieldset>
+{{ f.select('links', t('Ссылки'), {any: t('Не учитывать'), yes: t('Только со ссылками'), no: t('Только без ссылок')}, value = old('links', selection_rules.links), error = errors('links')|first, hint = t('Учитываются ссылки в тексте и скрытые ссылки Telegram.')) }}
+{{ f.select('forwarded', t('Пересылки'), {any: t('Не учитывать'), yes: t('Только пересылки'), no: t('Без пересылок')}, value = old('forwarded', selection_rules.forwarded), error = errors('forwarded')|first, hint = t('Если сведений о пересылке нет, потребуется ручная проверка.')) }}
+<p class="text-sm text-muted">{{ t('Сохранение пересчитает полученные материалы. Ручные решения сохранятся, в том числе после редактирования поста.') }}</p>
+<div>{{ f.button(t('Сохранить правила'), type = 'submit') }}</div>
+</form>
+{% endif %}

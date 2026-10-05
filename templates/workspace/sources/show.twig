@@ -1,0 +1,45 @@
+{% extends 'layouts/app.twig' %}
+{% import 'components/display.twig' as d %}
+{% import 'components/forms.twig' as f %}
+{% set nav_current = 'sources' %}
+{% set selection_rule_labels = {'rules.not_configured': 'Правила ещё не настроены', 'rules.matched': 'Все заданные условия', 'exclude_keywords': 'Исключающие ключевые слова', 'include_keywords': 'Включающие ключевые слова', 'exclude_hashtags': 'Исключающие хэштеги', 'include_hashtags': 'Включающие хэштеги', 'content_types': 'Тип материала', 'links': 'Наличие ссылок', 'forwarded': 'Пересылки', 'forwarded.unknown': 'Данные о пересылке', 'manual.approve': 'Ручное принятие', 'manual.reject': 'Ручное отклонение'} %}
+{% block title %}{{ source.name }} · {{ app_name }}{% endblock %}
+{% block content %}
+{{ d.breadcrumbs([{label: t('Источники'), href: base}, {label: source.name}]) }}
+{% set actions %}{% if can('sources.manage') %}{{ f.button(t('Редактировать источник'), href = base ~ '/' ~ source.publicId ~ '/edit', variant = 'secondary', icon = 'pencil') }}{% endif %}{% endset %}
+<div class="mt-3 break-words">{{ d.page_header(source.name, t('Источник контента для вашего пространства.'), body = actions) }}</div>
+{% set details %}
+<dl class="grid gap-4">
+    <div><dt class="text-sm text-muted">{{ t('Тип источника') }}</dt><dd>{{ source.type.label() }}</dd></div>
+    <div><dt class="text-sm text-muted">{{ t('Канал Telegram') }}</dt><dd><a class="link break-all" href="{{ source.telegramUrl() }}" target="_blank" rel="noopener noreferrer">@{{ source.telegramUsername }}</a></dd></div>
+    <div><dt class="text-sm text-muted">{{ t('Статус подключения') }}</dt><dd>{{ d.badge(t(source.status.label())) }}</dd></div>
+    <div><dt class="text-sm text-muted">{{ t('Источник включён') }}</dt><dd>{{ source.enabled ? t('Да') : t('Нет') }} <span class="text-sm text-muted">· {{ t('Материалы сохраняются без обработки и публикации') }}</span></dd></div>
+</dl>
+{% endset %}
+{{ d.card(t('Настройки источника'), body = details) }}
+{% set rules %}{% include 'workspace/sources/selection-rules.twig' %}{% endset %}
+<div class="mt-5">{{ d.card(t('Правила отбора'), body = rules) }}</div>
+{% set received %}
+<form method="get" action="{{ base }}/{{ source.publicId }}" class="mb-4 flex flex-wrap items-end gap-3">
+{{ f.select('selection_status', t('Статус отбора'), {'': t('Все материалы'), approved: t('Принятые'), rejected: t('Отклонённые'), needs_review: t('Требуют проверки')}, value = selection_filter) }}
+{{ f.button(t('Показать материалы'), type = 'submit', variant = 'secondary') }}
+</form>
+{% if incoming_items is empty %}<p class="text-muted">{{ selection_filter ? t('Нет материалов с выбранным статусом') : t('Пока нет полученных материалов') }}</p>{% else %}
+<ul class="grid gap-4">{% for item in incoming_items %}<li class="border-b border-line pb-4">
+<p class="text-sm text-muted">{{ item.published_at }} UTC · {{ item.content_type == 'album' ? t('Альбом') : (item.content_type == 'photo' ? t('Фото') : (item.content_type == 'text' ? t('Текст') : t('Другой тип'))) }} · {{ t('Сохранён') }}{% if item.edited_at %} · {{ t('Отредактирован') }}{% endif %}</p>
+<p class="mt-2">{{ d.badge(item.selection_status == 'approved' ? t('Принят') : (item.selection_status == 'rejected' ? t('Отклонён') : t('Требует проверки'))) }}{% if item.decision_mode == 'manual' %} <span class="text-sm text-muted">{{ t('Ручное решение') }}</span>{% endif %}</p>
+<p class="mt-2 text-sm">{{ item.selection_reason }}</p>
+<p class="mt-2 text-xs text-muted">{{ t('Сработавшее правило') }}: {{ t(selection_rule_labels[item.matched_rule ?? 'rules.not_configured'] ?? 'Правила отбора') }}</p>
+<p class="mt-2 break-words whitespace-pre-wrap">{{ item.text|slice(0, 300) }}{% if item.text|length > 300 %}…{% endif %}</p>
+<p class="mt-2 break-all text-xs text-muted">{{ t('Telegram message ID') }}: {{ item.message_ids }} · {{ t('Канал ID') }}: {{ item.peer_id }}</p>
+{% if can('sources.manage') %}
+<form method="post" action="{{ base }}/{{ source.publicId }}/items/{{ item.public_id }}/selection" class="mt-3 flex flex-wrap gap-3" data-source-form>
+{{ csrf_field() }}
+{{ f.button(t('Принять'), type = 'submit', size = 'sm', attrs = {name: 'decision', value: 'approved'}) }}
+{{ f.button(t('Отклонить'), type = 'submit', size = 'sm', variant = 'secondary', attrs = {name: 'decision', value: 'rejected'}) }}
+</form>{% endif %}
+</li>{% endfor %}</ul>{% endif %}
+{% endset %}
+<div class="mt-5">{{ d.card(t('Полученные материалы'), body = received) }}</div>
+<script src="{{ asset('js/sources.js') }}" nonce="{{ csp_nonce() }}" defer></script>
+{% endblock %}

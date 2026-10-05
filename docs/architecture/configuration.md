@@ -87,3 +87,7 @@
 | `APP_VERSION`, `APP_DEPLOYED_AT` | пусто | Что выкачено; показывается на странице «Состояние системы» (ставит деплой) |
 
 Остальное, что владелец меняет без выкладки, лежит в таблице `app_settings` (кэш в Redis): `site.maintenance`, `site.maintenance_message`, `site.registration`, `site.support_email`, `site.support_telegram`, `site.requisites`, `limits.max_workspaces_per_user`, `platforms.off`, `status.notices`, `design.colors`, `finance.fee_percent`, `report.*`, `campaigns.per_minute`, `metrics.refreshed_at`. Секретов там нет.
+
+## Внутренний Sources reader
+
+`SOURCES_READER_SECRET` — отдельный общий секрет PHP/reader, минимум 32 случайных символа; пустое значение выключает API. В конфигурации reader: `VKPOSTER_INTERNAL_URL` (локально `http://host.docker.internal:8080`). Telegram API credentials, телефон и session остаются только у reader. Не передавать их браузеру или PHP. После изменения `.env` пересоздать app; session volume reader сохраняется.

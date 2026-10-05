@@ -1,0 +1,25 @@
+{% extends 'layouts/app.twig' %}
+{% import 'components/display.twig' as d %}
+{% import 'components/forms.twig' as f %}
+{% set nav_current = 'sources' %}
+{% block title %}Источники · {{ app_name }}{% endblock %}
+{% block content %}
+{% set actions %}{% if can('sources.manage') %}{{ f.button(t('Добавить источник'), href = base ~ '/new', icon = 'plus') }}{% endif %}{% endset %}
+{{ d.page_header(t('Источники'), t('Каналы Telegram, из которых вы получаете материалы для дальнейшей работы.'), body = actions) }}
+{% if sources is empty %}
+<div class="card">{{ d.empty_state(t('Пока нет источников'), t('Добавьте публичный Telegram-канал и включите источник, чтобы получать материалы.'), 'share-2', can('sources.manage') ? t('Добавить источник') : null, base ~ '/new') }}</div>
+{% else %}
+<ul class="grid gap-4">
+{% for source in sources %}
+<li class="card flex flex-wrap items-center gap-4">
+    <div class="min-w-0 flex-1 basis-40">
+        <a class="link break-all font-semibold" href="{{ base }}/{{ source.publicId }}">{{ source.name }}</a>
+        <p class="mt-1 break-all text-sm text-muted">{{ source.type.label() }} · @{{ source.telegramUsername }}</p>
+    </div>
+    <div class="flex flex-wrap gap-2">{{ d.badge(t(source.status.label())) }}{{ d.badge(source.enabled ? t('Включён') : t('Выключен'), source.enabled ? 'info' : 'neutral') }}</div>
+    {{ f.button(t('Открыть источник'), href = base ~ '/' ~ source.publicId, variant = 'secondary', size = 'sm') }}
+</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

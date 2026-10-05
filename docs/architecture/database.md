@@ -6,6 +6,12 @@
 
 Базы в dev: `app` (приложение) и `app_test` (тесты, создаётся `docker/mysql/init/01-test-db.sql` при первом старте MySQL; для пересоздания: `docker compose down -v`).
 
+## Источники контента
+
+Миграция `2026_10_05_000013_create_sources.php` добавляет только `sources` и не изменяет существующие таблицы. Поля: `id BIGINT`, `public_id CHAR(26)` (ULID, UNIQUE), `workspace_id`, `name VARCHAR(255)`, `type VARCHAR(32)` (пока `telegram`), `telegram_username VARCHAR(32)` (нормализованное имя без `@`, нижний регистр), `status VARCHAR(32) DEFAULT 'not_connected'` (системное поле), `enabled BOOLEAN DEFAULT FALSE`, `created_by`, `created_at`, `updated_at` (`DATETIME(6)`, UTC).
+
+`UNIQUE(workspace_id, type, telegram_username)` запрещает дубликаты в одном workspace; collation `utf8mb4_unicode_ci` дополнительно защищает от разного регистра. FK `workspace_id → workspaces.id ON DELETE CASCADE`, `created_by → users.id ON DELETE SET NULL`. Связей с `channels` и постами нет. Правила отбора будут отдельным модулем/таблицами; колонки правил и статусов отбора здесь отсутствуют. Подробнее: [Sources](modules/sources.md).
+
 ## Служебные таблицы
 
 `migrations(id, migration UNIQUE, batch)` — учёт применённых миграций (создаётся `Migrator`).
@@ -343,3 +349,11 @@ erDiagram
 | `invite_codes` | Коды приглашений (только хэш) |
 
 Начисления вручную пишутся в `ledger_entries` (`ref_type = grant`, валюты `DAY`, `CRD`, `RUB`; счета `grants:<ед>` и `wallet:<ед>:<пространство>`).
+
+## Входящие материалы Sources
+
+Миграция `2026_10_05_000021_create_source_incoming.php`: `source_events`, `source_items`, `source_messages`. Каждая таблица содержит workspace_id/source_id с каскадными FK. События уникальны по source_id/event_id, логический пост — по source_id/peer_id/item_key, сообщение — по source_id/peer_id/message_id. Тексты/entities/media metadata и original/edit dates сохраняются без обработки; технический статус `stored`. Нет AI/selection-полей или связей с publishing. Подробнее: [Sources](modules/sources.md).
+
+## Отбор входящих материалов Sources
+
+Миграция `2026_10_05_000022_create_source_selection.php`: `source_selection_rules` (одна версия правил на Source) и `source_selection_decisions` (одна актуальная оценка на item: selection_status, decision_mode, reason, matched_rule, rules_version и rules_snapshot_json, decided_by). Workspace/source/item FK каскадные; пользователь-автор nullable с SET NULL. Индекс фильтра статуса: workspace_id/source_id/selection_status/item_id. Existing items backfill — needs_review. Технический status и таблица sources не меняются. См. [Sources](modules/sources.md#подэтап-23--детерминированный-отбор-и-ручные-решения).

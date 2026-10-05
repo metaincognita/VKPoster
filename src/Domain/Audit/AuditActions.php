@@ -14,6 +14,11 @@ final class AuditActions
 {
     /** @var array<string, string> */
     private const LABELS = [
+        'source.rules_updated' => 'Изменены правила отбора',
+        'source.item_approved' => 'Материал принят вручную',
+        'source.item_rejected' => 'Материал отклонён вручную',
+        'source.created' => 'Добавлен источник',
+        'source.updated' => 'Изменён источник',
         'workspace.created' => 'Создано пространство',
         'workspace.updated' => 'Изменены настройки пространства',
         'workspace.deleted' => 'Пространство удалено',
@@ -54,6 +59,7 @@ final class AuditActions
 
     /** @var array<string, string> filter value => label of the group of actions */
     private const GROUPS = [
+        'source' => 'Источники',
         'workspace' => 'Пространство',
         'member' => 'Команда',
         'channel' => 'Каналы',
@@ -82,6 +88,7 @@ final class AuditActions
             return Role::tryFrom($value)?->label() ?? $value;
         };
         $parts = match ($action) {
+            'source.created', 'source.updated' => [$text('name') === '' ? '' : '«' . $text('name') . '»'],
             'member.invited', 'member.invitation_revoked', 'member.removed' => [$text('email'), $role('role')],
             'member.joined', 'member.left' => [$role('role')],
             'member.role_changed' => [($text('email') === '' ? '' : $text('email') . ': ') . $role('from') . ' → ' . $role('to')],

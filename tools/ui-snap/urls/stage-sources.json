@@ -1,0 +1,17 @@
+[
+  {"name": "sources-empty", "url": "/w/{ws}/sources", "login_as": "sources-empty@ezposter.local"},
+  {"name": "sources-list", "url": "/w/{ws}/sources", "login_as": "sources-demo@ezposter.local"},
+  {"name": "sources-new", "url": "/w/{ws}/sources/new", "login_as": "sources-demo@ezposter.local"},
+  {"name": "sources-show", "url": "/w/{ws}/sources", "login_as": "sources-demo@ezposter.local", "actions": [
+    {"click": "main a:has-text('Открыть источник') >> nth=0"}
+  ]},
+  {"name": "sources-edit", "url": "/w/{ws}/sources", "login_as": "sources-demo@ezposter.local", "actions": [
+    {"click": "main a:has-text('Открыть источник') >> nth=0"},
+    {"click": "main a:has-text('Редактировать источник')"}
+  ]},
+  {"name": "sources-error", "url": "/w/{ws}/sources/new", "login_as": "sources-demo@ezposter.local", "actions": [
+    {"fill": ["#f-name", "Новый источник"]},
+    {"fill": ["#f-reference", "https://t.me/channel_name/123"]},
+    {"click": "main button[type=submit]"}
+  ]}
+]

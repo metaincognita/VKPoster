@@ -23,6 +23,8 @@ use App\Http\Controllers\Dev\DevUiController;
 use App\Http\Controllers\Channels\ChannelController;
 use App\Http\Controllers\Channels\MaxConnectController;
 use App\Http\Controllers\Channels\VkConnectController;
+use App\Http\Controllers\Sources\SourceController;
+use App\Http\Controllers\Sources\SourceReaderController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Webhooks\MaxWebhookController;
 use App\Http\Controllers\Webhooks\PaymentWebhookController;
@@ -87,6 +89,8 @@ use App\Kernel\Http\Router;
 return static function (Router $router): void {
     $router->get('/', [HomeController::class, 'index'])->name('home')->middleware(TrackVisit::class, OptionalAuthenticate::class);
     $router->get('/healthz', [HealthController::class, 'show'])->name('health');
+    $router->get('/internal/sources', [SourceReaderController::class, 'sources'])->middleware([RateLimit::class, ['bucket' => 'source-reader-list', 'max' => 120, 'seconds' => 60]]);
+    $router->post('/internal/source-events', [SourceReaderController::class, 'event'])->withoutCsrf()->middleware([RateLimit::class, ['bucket' => 'source-reader-events', 'max' => 600, 'seconds' => 60]]);
 
     // Public site: legal documents, the knowledge base, the status of the networks, and what search engines may read.
     $router->get('/legal/{slug:[a-z]{3,20}}', [LegalController::class, 'show'])->name('legal.show')->middleware(OptionalAuthenticate::class);
@@ -238,6 +242,19 @@ return static function (Router $router): void {
                 $m->get($mark . '/preview', [WatermarkController::class, 'preview'])->middleware([RateLimit::class, ['bucket' => 'watermark-preview', 'max' => 120, 'seconds' => 60]]);
                 $m->post($mark . '/update', [WatermarkController::class, 'update']);
                 $m->post($mark . '/delete', [WatermarkController::class, 'delete']);
+            });
+            // Sources and selection remain separate from the publishing pipeline.
+            $w->group('/sources', [[Authorize::class, ['permission' => 'sources.view']]], static function (Router $s) use ($ulid): void {
+                $s->get('', [SourceController::class, 'index'])->name('workspace.sources');
+                $s->group('', [[Authorize::class, ['permission' => 'sources.manage']]], static function (Router $m) use ($ulid): void {
+                    $m->get('/new', [SourceController::class, 'new']);
+                    $m->post('', [SourceController::class, 'create']);
+                    $m->get('/{sourceId:' . $ulid . '}/edit', [SourceController::class, 'edit']);
+                    $m->post('/{sourceId:' . $ulid . '}', [SourceController::class, 'update']);
+                    $m->post('/{sourceId:' . $ulid . '}/selection-rules', [\App\Http\Controllers\Sources\SelectionController::class, 'rules']);
+                    $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/selection', [\App\Http\Controllers\Sources\SelectionController::class, 'decide']);
+                });
+                $s->get('/{sourceId:' . $ulid . '}', [SourceController::class, 'show'])->name('workspace.sources.show');
             });
             // Channels. Everyone who works on posts may look; connecting and changing is for owners and administrators.
             $w->get('/channels', [ChannelController::class, 'index'])->name('workspace.channels')->middleware([Authorize::class, ['permission' => 'channels.view']]);

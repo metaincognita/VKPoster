@@ -42,4 +42,13 @@ final class AuditActionsTest extends TestCase
         self::assertArrayHasKey('member', AuditActions::groups());
         self::assertArrayHasKey('billing', AuditActions::groups());
     }
+
+    public function testSourcesHaveLabelsDetailsAndTheirOwnGroup(): void
+    {
+        self::assertSame('Добавлен источник', AuditActions::label('source.created'));
+        self::assertSame('Изменён источник', AuditActions::label('source.updated'));
+        self::assertSame('«Новости»', AuditActions::describe('source.created', ['name' => 'Новости']));
+        self::assertSame('«Новости»', AuditActions::describe('source.updated', ['name' => 'Новости']));
+        self::assertSame('Источники', AuditActions::groups()['source']);
+    }
 }

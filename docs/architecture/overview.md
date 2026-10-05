@@ -19,6 +19,8 @@
 
 ## Модули каркаса
 
+Минимальный модуль [Sources](modules/sources.md) хранит источники контента отдельно от каналов назначения: workspace-изолированная сущность, список, создание, редактирование и карточка. Изолированный Telegram reader доставляет входящие материалы через внутренний HTTP API с durable outbox; публикации пока отсутствуют.
+
 | Модуль | Классы | Назначение |
 |---|---|---|
 | Конфигурация | `Env`, `Config` | типизированные геттеры, падение при отсутствии обязательных переменных, запрет `APP_DEBUG` и `DEV_*` в production |
@@ -61,3 +63,5 @@
 - `tests/Feature` — HTTP через `Application` в одном процессе (`HttpTestCase`: cookie-jar, тестовые маршруты).
 - `tests/Support` — `FakeClock`, `MockHttpClient` (падает на незапланированный запрос), `ArraySessionStore`, `TestEnv`.
 - Правило PHPStan `RequireClassDocblockRule` (`tools/phpstan/`) требует docblock у каждого класса в `src/`.
+
+Sources: детерминированный отбор и ручные решения изолированы в `Domain/Source/Selection`, хранятся отдельно от входящих item и технического статуса. Алгоритм: сохранение логического item → deterministic selection → approved/rejected/needs_review → будущая Content Processing. AI и publishing не вызываются. Подробнее: [Sources](modules/sources.md).
