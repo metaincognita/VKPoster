@@ -254,6 +254,7 @@ return static function (Router $router): void {
                     $m->post('/items/{discoveryId:' . $ulid . '}/import', [\App\Http\Controllers\Discovery\RadarController::class, 'import']);
                     $m->post('/clusters/{clusterId:' . $ulid . '}/ignore', [\App\Http\Controllers\Discovery\RadarController::class, 'ignore']);
                     $m->post('/materials/{itemId:' . $ulid . '}/selection', [\App\Http\Controllers\Discovery\RadarController::class, 'decide']);
+                    $m->post('/materials/{itemId:' . $ulid . '}/draft', [\App\Http\Controllers\Sources\ContentDraftController::class, 'create'])->middleware([Authorize::class, ['permission' => 'posts.draft']])->middleware([RateLimit::class, ['bucket' => 'content-draft', 'max' => 10, 'seconds' => 60]]);
                     $m->post('/materials/{itemId:' . $ulid . '}/process', [\App\Http\Controllers\Discovery\RadarController::class, 'process'])->middleware([RateLimit::class, ['bucket' => 'discovery-processing', 'max' => 30, 'seconds' => 60]]);
                 });
             });
@@ -265,6 +266,7 @@ return static function (Router $router): void {
                     $m->post('', [SourceController::class, 'create']);
                     $m->get('/{sourceId:' . $ulid . '}/edit', [SourceController::class, 'edit']);
                     $m->post('/{sourceId:' . $ulid . '}', [SourceController::class, 'update']);
+                    $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/draft', [\App\Http\Controllers\Sources\ContentDraftController::class, 'create'])->middleware([Authorize::class, ['permission' => 'posts.draft']])->middleware([RateLimit::class, ['bucket' => 'content-draft', 'max' => 10, 'seconds' => 60]]);
                     $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/process', [\App\Http\Controllers\Sources\ProcessingController::class, 'process'])->middleware([RateLimit::class, ['bucket' => 'source-text-processing', 'max' => 30, 'seconds' => 60]]);
                     $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/images', [\App\Http\Controllers\Sources\ImageProcessingController::class, 'request'])->middleware([RateLimit::class, ['bucket' => 'source-images-request', 'max' => 10, 'seconds' => 60]]);
                     $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/images/select', [\App\Http\Controllers\Sources\ImageProcessingController::class, 'choose']);

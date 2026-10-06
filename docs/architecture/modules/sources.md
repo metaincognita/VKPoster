@@ -132,3 +132,7 @@ Radar discovers metadata independently of user Sources. An explicit gateway impo
 ## Optional semantic layer (2.6)
 
 [Semantic Selection](semantic-selection.md) runs after deterministic approved in the existing SelectionService. Settings and revision history are separate tables; final decisions remain in source_selection_decisions, manual override wins and semantic off retains prior behavior. Fake provider only; no reader/publishing changes.
+
+## Stage 3.1 — PostDraft boundary
+
+Current approved materials export through ContentDraftService into ordinary PostService drafts, with pinned provenance/revisions and idempotency. Source and input material remain immutable; PostService/Publisher preflight blocks stale or rejected origins. Images enter MediaService at export; Fake video has no publishable file. See [Content drafts](content-drafts.md).

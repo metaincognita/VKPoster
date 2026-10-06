@@ -220,12 +220,15 @@ final class DiscoveryTest extends SourceSelectionTestCase
         $material = $c->get(MaterialRepository::class)->item($ctx, null, $id);
         $c->get(ContentProcessor::class)->process($ctx, null, $id, MaterialRepository::revision($material, []), TextSettings::fromInput([]));
         $migration = require TestEnv::basePath() . '/database/migrations/2026_10_06_000026_create_content_discovery.php';
+        $origins = require TestEnv::basePath() . '/database/migrations/2026_10_06_000028_create_content_post_origins.php';
+        $origins->down($this->db);
         $migration->down($this->db);
         self::assertSame(1, $this->db->table('source_items')->count());
         self::assertSame('Existing Source text', ($this->db->table('source_items')->first() ?? throw new \RuntimeException('Missing existing item'))['text']);
         self::assertSame(0, $this->db->table('source_text_processings')->count());
         self::assertSame([], $this->db->select('SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', ['discovery_items']));
         $migration->up($this->db);
+        $origins->up($this->db);
         self::assertSame('YES', array_column($this->db->select('SHOW COLUMNS FROM source_items'), 'Null', 'Field')['source_id']);
     }
 }

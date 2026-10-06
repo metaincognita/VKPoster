@@ -15,6 +15,7 @@
 {% endif %}
 {% if is_discovery %}<div class="my-5">{{ d.alert('info', t('Материал из радара'), selection_reason) }}</div>{% if can('discovery.manage') %}<div class="my-5 flex flex-wrap gap-3">{% for choice, label in {approve: 'Принять', reject: 'Отклонить'} %}<form method="post" action="{{ material_url }}/selection" data-discovery-processing>{{ csrf_field() }}<input type="hidden" name="decision" value="{{ choice }}">{{ f.button(t(label), type = 'submit', variant = 'secondary') }}</form>{% endfor %}</div>{% endif %}{% endif %}
 {% if deterministic is defined %}{% include 'workspace/sources/semantic-decision.twig' %}{% endif %}
+{% include 'workspace/sources/content-draft.twig' %}
 {% set original %}<p class="break-words whitespace-pre-wrap">{{ material.text }}</p>{% if material.text is empty %}<p class="text-muted">{{ t('В материале нет текста') }}</p>{% endif %}{% endset %}
 {{ d.card(t('Исходный текст'), body = original) }}
 {% set controls %}

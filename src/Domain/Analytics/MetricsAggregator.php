@@ -159,6 +159,8 @@ final class MetricsAggregator
             $add('semantic_evaluations', (string) $row['status'], (int) $row['c']);
         }
 
+        $add('content_drafts_created', '', $this->count('SELECT COUNT(*) AS c FROM content_post_origins WHERE created_at >= ? AND created_at < ?', [$from, $to]));
+
         // Activity.
         $date = $day->format('Y-m-d');
         $add('dau', '', $this->count('SELECT COUNT(*) AS c FROM user_activity_days WHERE day = ?', [$date]));

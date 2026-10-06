@@ -78,4 +78,6 @@
 </section>
 {% set semantic_counts %}<dl class="grid gap-2">{% for status, label in {completed: 'Оценены', failed: 'Ошибки', blocked: 'Остановлены правилами'} %}<div class="flex justify-between gap-3"><dt>{{ t(label) }}</dt><dd>{{ semantic_selection[status] }}</dd></div>{% endfor %}</dl><p class="mt-3 text-sm text-muted">{{ t('Структурированные оценки Fake provider. Содержимое материалов и критерии здесь не отображаются.') }}</p>{% endset %}
 <div class="mt-5">{{ d.card(t('Смысловой отбор'), body = semantic_counts) }}</div>
+{% set draft_counts %}{% if content_drafts is empty %}<p>{{ t('Черновики из материалов за этот период не создавались.') }}</p>{% else %}<dl class="grid gap-2">{% for status, count in content_drafts %}<div class="flex justify-between gap-3"><dt>{{ t({draft:'Черновики',scheduled:'Запланированы',publishing:'Публикуются',published:'Опубликованы',failed:'Ошибки',partially_failed:'Опубликованы частично',cancelled:'Отменены',deleted:'Удалены'}[status] ?? 'Неизвестно') }}</dt><dd>{{ count }}</dd></div>{% endfor %}</dl>{% endif %}{% endset %}
+<div class="mt-5">{{ d.card(t('Посты из материалов'), body = draft_counts) }}</div>
 {% endblock %}

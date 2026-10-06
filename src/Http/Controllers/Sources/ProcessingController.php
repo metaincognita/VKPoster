@@ -20,7 +20,7 @@ use App\Kernel\View\View;
 /** Material detail and CSRF-protected text processing endpoints; domain owns approval and revision checks. */
 final class ProcessingController
 {
-    public function __construct(private readonly SourceRepository $sources, private readonly MaterialRepository $materials, private readonly ContentProcessor $processor, private readonly View $view, private readonly FormFlash $flash, private readonly \App\Domain\Source\Selection\SemanticSelection $semantic, private readonly \App\Domain\Source\Selection\SelectionService $selectionService)
+    public function __construct(private readonly SourceRepository $sources, private readonly MaterialRepository $materials, private readonly ContentProcessor $processor, private readonly View $view, private readonly FormFlash $flash, private readonly \App\Domain\Source\Selection\SemanticSelection $semantic, private readonly \App\Domain\Source\Selection\SelectionService $selectionService, private readonly \App\Domain\Content\Publishing\ContentDraftService $drafts)
     {
     }
 
@@ -45,7 +45,7 @@ final class ProcessingController
             'semantic_history' => $this->semantic->history($context->workspaceId, 'material', (int) $item['id']),
             'semantic_enabled' => $this->semantic->settings($context->workspaceId, $source->id)['settings']->enabled,
             'selection_detail' => $selection,
-            'selection_status' => $selection['selection_status'] ?? 'needs_review',
+            'draft_videos' => $this->drafts->videoChoices($context, $source, (string) $item['public_id']), 'created_drafts' => $this->drafts->history($context, (int) $item['id']), 'selection_status' => $selection['selection_status'] ?? 'needs_review',
             'settings' => $history === [] ? TextSettings::fromInput([])->form() : json_decode((string) $history[0]['settings_json'], true, 32, JSON_THROW_ON_ERROR)]);
     }
 

@@ -1,0 +1,17 @@
+{% import 'components/display.twig' as d %}
+{% import 'components/forms.twig' as f %}
+{% set draft_controls %}
+<p>{{ t('Выберите готовый результат текста. Выбранные изображения будут добавлены в медиатеку. Дальнейшая работа — в обычном редакторе поста.') }}</p>
+{% set text_versions = {} %}{% for attempt in history %}{% if attempt.current %}{% set text_versions = text_versions|merge({(attempt.public_id): t('Версия текста') ~ ' ' ~ attempt.settings_version ~ ' · ' ~ t(mode_labels[attempt.mode] ?? 'Без изменений')}) %}{% endif %}{% endfor %}
+{% if can(processing_permission|default('sources.manage')) and can('posts.draft') %}
+<form method="post" action="{{ material_url }}/draft" class="mt-4 grid gap-4" data-content-draft>
+{{ csrf_field() }}<input type="hidden" name="revision" value="{{ revision }}">
+{{ f.select('text_version', t('Результат обработки текста'), text_versions, value = old('text_version', ''), hint = t('Сначала обработайте актуальный принятый материал, в том числе в режиме «Без изменений».')) }}
+{{ f.select('video_version', t('Видео'), draft_videos, value = old('video_version', ''), hint = t('Fake VideoProvider не создаёт файл. Его демонстрационные результаты нельзя прикрепить к публикации.')) }}
+<div>{{ f.button(t('Создать черновик'), type = 'submit', disabled = selection_status != 'approved' or text_versions is empty) }}</div>
+</form>{% endif %}
+{% if created_drafts is empty %}<p class="mt-4 text-muted">{{ t('Черновики из этого материала пока не созданы.') }}</p>{% else %}
+<ul class="mt-4 grid gap-3">{% for post in created_drafts %}<li>{% if post.public_id %}<a class="text-link underline" href="/w/{{ workspace.workspacePublicId }}/posts/{{ post.public_id }}{{ post.status in ['draft', 'scheduled', 'failed', 'cancelled'] ? '/edit' : '' }}">{{ t('Открыть черновик') }}</a> · {{ d.badge(t({draft:'Черновик',scheduled:'Запланирован',publishing:'Публикуется',published:'Опубликован',failed:'Ошибка',partially_failed:'Опубликован частично',cancelled:'Отменён'}[post.status] ?? 'Неизвестно')) }}{% else %}{{ t('Созданный черновик удалён.') }}{% endif %}</li>{% endfor %}</ul>
+{% endif %}
+{% endset %}
+<div class="my-5">{{ d.card(t('Черновик поста'), body = draft_controls) }}</div>

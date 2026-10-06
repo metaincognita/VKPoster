@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- Sources 3.1: current approved content exports into ordinary PostDraft/PostService, with selected text/media, immutable provenance, idempotency and stale/rejected publishing guards. UI, audit/metrics, synthetic E2E; no external API calls.
 - Sources 2.5: Content Discovery / Trend Radar Core с Fake Telegram/WebNews/Social providers, дедупликацией, эвристической кластеризацией, объяснимым Trend Score и импортом через отдельную границу в существующий content flow. Реальные API, постоянный polling и publishing не подключены.
 - Sources 2.4C: Video Generation Core с отдельным VideoProvider, Fake lifecycle без видеофайла, snapshots настроек и основ, историей заданий, выбором результата и UI.
 - Sources 2.6: optional Semantic Selection поверх существующих правил, отдельная revision/policy history, thresholds score/confidence и manual priority; Fake provider без AI API. Source/материал/Радар UI показывает semantic relevance отдельно от Trend Score; защищённая операционная статистика хранит только counts.

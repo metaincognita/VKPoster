@@ -377,3 +377,7 @@ Migration 26 adds discovery_items, discovery_clusters, discovery_item_keys, disc
 ## Semantic Selection (migration 27)
 
 `semantic_selection_settings` — версии per-workspace Source/Radar policy; `semantic_selection_evaluations` — отдельная неизменяемая история origin/revision/policy, deterministic outcome, structured provider decision, score, confidence и composed decision. Итог остаётся в `source_selection_decisions`. Технические processing/source/discovery status не смешиваются. См. [Semantic Selection](modules/semantic-selection.md).
+
+## Content draft provenance (Sources 3.1)
+
+Migration 28 adds content_post_origins: workspace, nullable item/post/text-processing FKs with deletion tombstones, revision/selection hashes, workspace-unique idempotency key, immutable processing/media/Discovery snapshot, actor and UTC creation time. Rollback refuses active sending, cancels linked queued publications and resets linked scheduled posts. See [Content drafts](modules/content-drafts.md).

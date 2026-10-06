@@ -1,0 +1,68 @@
+[
+  {
+    "name": "content-draft-source",
+    "url": "/w/{ws}/sources",
+    "login_as": "draft-ui@example.com",
+    "actions": [
+      {
+        "click": "button[data-cookie-choice='necessary']"
+      },
+      {
+        "click": "main a:has-text('Content Draft UI')"
+      },
+      {
+        "click": "main a:has-text('Открыть материал')"
+      },
+      {
+        "press": [
+          "body",
+          "Home"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "content-draft-discovery",
+    "url": "/w/{ws}/radar?status=imported",
+    "login_as": "draft-ui@example.com",
+    "actions": [
+      {
+        "click": "button[data-cookie-choice='necessary']"
+      },
+      {
+        "click": "main a:has-text('Открыть материал')"
+      },
+      {
+        "press": [
+          "body",
+          "Home"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "content-draft-editor",
+    "url": "/w/{ws}/sources",
+    "login_as": "draft-ui@example.com",
+    "actions": [
+      {
+        "click": "button[data-cookie-choice='necessary']"
+      },
+      {
+        "click": "main a:has-text('Content Draft UI')"
+      },
+      {
+        "click": "main a:has-text('Открыть материал')"
+      },
+      {
+        "click": "main a:has-text('Открыть черновик')"
+      },
+      {
+        "press": [
+          "body",
+          "Home"
+        ]
+      }
+    ]
+  }
+]

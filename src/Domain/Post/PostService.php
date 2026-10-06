@@ -54,6 +54,7 @@ final class PostService
         private readonly ChannelCredentials $credentials,
         private readonly PublicationDeleter $deleter,
         private readonly Entitlements $entitlements,
+        private readonly \App\Domain\Content\Publishing\ContentOriginGuard $origin,
     ) {
     }
 
@@ -143,6 +144,9 @@ final class PostService
     public function schedule(WorkspaceContext $context, ?Post $existing, PostDraft $draft, DateTimeImmutable $at, bool $now = false): Post
     {
         $this->requirePermission($context, 'posts.publish');
+        if ($existing !== null) {
+            $this->origin->assertCurrent($existing);
+        }
         if (!$now && $at <= $this->clock->now()) {
             throw new PostException('Это время уже прошло. Выберите время в будущем.');
         }
@@ -180,6 +184,7 @@ final class PostService
     public function reschedule(WorkspaceContext $context, Post $post, DateTimeImmutable $at): Post
     {
         $this->requirePermission($context, 'posts.publish');
+        $this->origin->assertCurrent($post);
         if ($at <= $this->clock->now()) {
             throw new PostException('Это время уже прошло. Выберите время в будущем.');
         }
@@ -268,7 +273,12 @@ final class PostService
             }
             $variants[] = new VariantInput($channel->publicId, $variant->text, $variant->mediaIds, $variant->options);
         }
-        $copy = $this->saveDraft($context, null, new PostDraft($post->baseText, $post->mediaIds, $post->options, $post->perNetwork, $variants));
+        $this->origin->assertCurrent($post);
+        $copy = $this->db->transaction(function () use ($context, $post, $variants): Post {
+            $copy = $this->saveDraft($context, null, new PostDraft($post->baseText, $post->mediaIds, $post->options, $post->perNetwork, $variants));
+            $this->origin->copy($post, $copy);
+            return $copy;
+        });
         $this->audit->record('post.duplicated', $context->userId, 'post', $copy->publicId, ['title' => $copy->title(60)], $context->workspaceId);
 
         return $copy;
@@ -306,6 +316,10 @@ final class PostService
     public function retry(WorkspaceContext $context, Publication $publication): void
     {
         $this->requirePermission($context, 'posts.publish');
+        $loaded = $this->system->load($publication);
+        if ($loaded !== null) {
+            $this->origin->assertCurrent($loaded['post']);
+        }
         if (!in_array($publication->status, [PublicationStatus::Failed, PublicationStatus::Unknown], true)) {
             throw new PostException('Повторить можно только то, что не удалось опубликовать.');
         }

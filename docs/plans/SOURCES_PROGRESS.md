@@ -29,11 +29,11 @@
 | 2.5 Content Discovery / Trend Radar Core | **Completed / Завершён (Core, Fake providers)** | Независимый от Sources Радар, дедупликация, эвристические кластеры, объяснимый score и импорт в существующую текстовую обработку |
 | 2.6 Semantic AI Selection / Ranking Core | **Completed / Завершён (Core, Fake provider)** | Семантический отбор и ранжирование по пользовательским критериям, структурированные решения, независимость от AI-провайдера |
 
-Входящие данные и отбор существуют отдельно от publishing. Реальный AI, enhancement/reverse image search, создание PostDraft и автоматическая публикация из Source не подключены. Текстовая обработка 2.4A проверяется через Fake provider. Решение отбора не меняет технический статус `stored`. Exclude имеет приоритет, категории работают через AND, значения списка — OR, альбом оценивается целиком. До сохранения правил — needs_review; явно сохранённые пустые правила разрешают всё. Ручное решение сохраняется после edits и смены правил.
+На контрольной точке Этапа 2 входящие данные и отбор были отдельны от publishing. Реальный AI, enhancement/reverse image search, создание PostDraft и автоматическая публикация из Source тогда не были подключены. Ручная связь с PostDraft и существующим publishing добавлена в 3.1 (см. ниже). Текстовая обработка 2.4A проверяется через Fake provider. Решение отбора не меняет технический статус `stored`. Exclude имеет приоритет, категории работают через AND, значения списка — OR, альбом оценивается целиком. До сохранения правил — needs_review; явно сохранённые пустые правила разрешают всё. Ручное решение сохраняется после edits и смены правил.
 
 ## Этап 3 из 3 — полная автоматизация
 
-**Запланирован; реализация не начата.**
+**Подэтап 3.1 completed / завершён и проверен; остальные production-подэтапы не начаты.**
 
 - Полная end-to-end автоматизация от Source и отбора до обработанного материала и публикации.
 - Интеграция с существующими PostDraft / scheduler / publishing без переписывания текущего pipeline.
@@ -111,7 +111,7 @@ Reader: **35 автономных тестов**, отдельный успеш�
 - Discovery providers пока Fake; постоянный polling не подключён.
 - Semantic AI provider пока Fake; естественно-языковое понимание и production AI не заявляются.
 - Реальное скачивание Telegram-фото в Image Processing отдельно live не проверялось; передача и обработка проверены автономно и через HTTP contract.
-- PostDraft и publishing намеренно ещё не связаны с новым content pipeline.
+- Ограничение Stage 2: PostDraft/publishing не были связаны. В 3.1 добавлены ручной экспорт и preflight в существующем pipeline; полностью автоматическая production-цепочка ещё не реализована.
 
 Следующий этап требует отдельной команды владельца. Новые внешние live-тесты при финальном regression не проводились.
 
@@ -125,3 +125,15 @@ Reader: **35 автономных тестов**, отдельный успеш�
 - UI/axe: Image Processing, Video Generation, Radar и Semantic — 8 страниц, 48 screenshots (375/768/1440 × light/dark); axe дополнительно на 360px, без serious/critical нарушений и горизонтального переполнения. Ключевые скриншоты просмотрены. Fixtures и consent использовались только для тестовых пользователей app_test.
 - Проверен весь diff относительно `6d70d683806112a5dd3fd318264087a1e5d2b5da`: 2.4B–2.6, их интеграция, документация и тесты. Отдельно проверено отсутствие локальных credentials в подготавливаемом commit; `.env`, session, runtime SQLite, временные файлы и `.DS_Store` исключены.
 - Финальная фиксация выполняется одним commit в `stage-13-sources-skeleton`; main и резервный `stash@{0}` сохранены. Новая функциональность и Этап 3 не начаты.
+
+## Подэтап 3.1 — связь content с существующим publishing
+
+ContentDraftService, content_post_origins (migration 28), ContentOriginGuard: [архитектура](../architecture/modules/content-drafts.md). Актуальный approved Source/Discovery материал, выбранный text attempt и image/video variants превращаются в обычный PostDraft через PostService. Пользователь продолжает работу в существующем редакторе; scheduler/Queue/adapters не переписаны, SourcePublisher отсутствует. Повторный экспорт идемпотентен; ordinary duplication сохраняет origin; stale/rejected/needs_review не проходят экспорт/отправку. Fake video не прикрепляется как настоящий файл. Новые внешние providers, Telegram login и live-проверки не запускались.
+
+Production debt: реальные providers, постоянный polling, live photo transfer, retention/quotas/recovery и координация deployment rollback. MySQL не может атомарно отменить уже начатый внешний send; используется последний preflight. Экспорт пока ручной; новая ревизия/решение требует свежей обработки и отдельного черновика. Коммит/push в 3.1 не выполняются; main и резервный stash сохранены.
+
+Проверки 3.1: **17 новых E2E/feature tests / 150 assertions**; полный PHP suite — **1928 tests / 38195 assertions**, успешно. ContentDraftService PCOV 94.12%, ContentOriginGuard 90.24%. Reader — 52 автономных tests и 2 отдельных HTTP contracts, успешно. PHPStan level 8 + strict rules, Ruff, стиль, CSS build, composer audit (0 advisories), phpDocumentor и /healthz (DB/Redis ok) — успешно. Миграция 28 применена локально, rollback/replay на app_test проверен, включая отмену queued и запрет rollback во время sending. UI/axe: Source material, Discovery material, ordinary editor — 18 screenshots (375/768/1440 × light/dark), дополнительный axe на 360px, без serious/critical нарушений и horizontal overflow; скриншоты просмотрены. Тестовые fixtures изолированы в app_test; основной consent и live-материалы не менялись. Secrets scan PASS.
+
+### Stage 3.1 checkpoint
+
+**3.1 completed.** Dedicated Git checkpoint contains only content-to-draft integration, guards, UI, tests and documentation. Local secrets, runtime files and .DS_Store are excluded. Stage 3.2 starts only after this checkpoint is pushed successfully.

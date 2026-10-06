@@ -202,6 +202,19 @@ final class OperationalStats
         return $counts;
     }
 
+    /**
+     * Derived post counts only; the ordinary post editor remains the intervention boundary.
+     * @return array<string,int>
+     */
+    public function contentDrafts(DateTimeImmutable $from, DateTimeImmutable $to): array
+    {
+        $counts = [];
+        foreach ($this->db->select('SELECT COALESCE(p.status, ?) AS status, COUNT(*) AS c FROM content_post_origins o LEFT JOIN posts p ON p.id = o.post_id AND p.workspace_id = o.workspace_id WHERE o.created_at >= ? AND o.created_at < ? GROUP BY status', ['deleted', DbTime::format($from), DbTime::format($to)]) as $row) {
+            $counts[(string) $row['status']] = (int) $row['c'];
+        }
+        return $counts;
+    }
+
     /** @return array<string,int> Semantic counts only; no post contents, criteria, provider payloads or secrets. */
     public function semanticSelection(DateTimeImmutable $from, DateTimeImmutable $to): array
     {

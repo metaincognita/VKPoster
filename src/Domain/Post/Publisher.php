@@ -70,6 +70,7 @@ final class Publisher
         private readonly Clock $clock,
         private readonly Config $config,
         private readonly LoggerInterface $logger,
+        private readonly \App\Domain\Content\Publishing\ContentOriginGuard $origin,
     ) {
     }
 
@@ -105,6 +106,11 @@ final class Publisher
             return;
         }
         ['post' => $post, 'variant' => $variant] = $loaded;
+        $originError = $this->origin->problem($post);
+        if ($originError !== null) {
+            $this->fail($publication, $post, $variant, $started, 'origin_stale', $originError, 'content origin preflight failed');
+            return;
+        }
         $channel = $variant->channelId === null ? null : $this->channels->find($variant->channelId);
         if ($channel === null) {
             $this->fail($publication, $post, $variant, $started, 'channel_missing', 'Канал отключён от сервиса, поэтому пост не отправлен.', 'channel row is gone');
@@ -156,6 +162,12 @@ final class Publisher
         }
 
         try {
+            // Media preparation may take time. Revalidate immediately before the existing adapter sends anything.
+            $originError = $this->origin->problem($post);
+            if ($originError !== null) {
+                $this->fail($publication, $post, $variant, $started, 'origin_stale', $originError, 'content origin changed during preparation');
+                return;
+            }
             $result = $adapter->publish($built->request, $channel->externalId, $this->credentials->forChannel($channel), $publication->idempotencyKey);
         } catch (PlatformError $e) {
             // An unknown outcome is first checked against the channel itself (where the network allows it): a post that is there is a success.
