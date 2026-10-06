@@ -60,7 +60,8 @@ final class ContentProcessor
         } catch (Throwable) {
             $error = 'Обработка не удалась. Повторите попытку.';
         }
-        return $this->db->transaction(function () use ($context, $source, $itemPublicId, $revision, $attempt, $output, $error): string {
+        $metadata = $this->text->providerMetadata($settings);
+        return $this->db->transaction(function () use ($context, $source, $itemPublicId, $revision, $attempt, $output, $error, $metadata): string {
             $this->lock($context, $source, $itemPublicId);
             $item = $this->materials->item($context, $source, $itemPublicId);
             $messages = $this->materials->messages($context, $source, (int) $item['id']);
@@ -68,7 +69,7 @@ final class ContentProcessor
             $stale = !hash_equals($revision, MaterialRepository::revision($item, $messages)) || !hash_equals($attempt['selection_hash'], MaterialRepository::selectionHash($selection)) || ($selection['selection_status'] ?? '') !== 'approved';
             $status = $stale ? 'stale' : ($error === null ? 'completed' : 'failed');
             $now = DbTime::format($this->clock->now());
-            $this->db->execute('UPDATE source_text_processings SET processed_text = ?, status = ?, error = ?, updated_at = ?, finished_at = ? WHERE workspace_id = ? AND source_id <=> ? AND public_id = ?', [$output, $status, $stale ? 'Материал или решение отбора изменились. Обработайте актуальную версию.' : $error, $now, $now, $context->workspaceId, $source?->id, $attempt['public_id']]);
+            $this->db->execute('UPDATE source_text_processings SET provider_metadata_json = ?, processed_text = ?, status = ?, error = ?, updated_at = ?, finished_at = ? WHERE workspace_id = ? AND source_id <=> ? AND public_id = ?', [json_encode($metadata, JSON_THROW_ON_ERROR), $output, $status, $stale ? 'Материал или решение отбора изменились. Обработайте актуальную версию.' : $error, $now, $now, $context->workspaceId, $source?->id, $attempt['public_id']]);
             $this->audit->record('source.text_' . $status, $context->userId, 'source_item', $itemPublicId, [], $context->workspaceId);
             return $status;
         });

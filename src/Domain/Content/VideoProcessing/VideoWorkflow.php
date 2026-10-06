@@ -99,6 +99,28 @@ final class VideoWorkflow
             $this->lock($ctx, $source);
             $item = $this->materials->item($ctx, $source, $itemId);
             $row = $this->repository->attempt($ctx, $source, (int) $item['id'], $jobId);
+            if ($row['status'] === 'processing' && $this->provider instanceof \App\Integrations\Video\AsyncVideoProvider) {
+                if ($row['provider_job_id'] === null) {
+                    // An ambiguous remote start is never resubmitted automatically.
+                    if ($row['started_at'] !== null && (string) $row['started_at'] < DbTime::format($this->clock->now()->modify('-120 seconds'))) {
+                        $this->finish($ctx, $source, $itemId, $jobId, null, 'Запуск не подтверждён. Проверьте задание у провайдера перед повторной генерацией.');
+                        $row['status'] = 'failed';
+                    }
+                    return $row;
+                }
+                if ($row['poll_claimed_at'] !== null && (string) $row['poll_claimed_at'] >= DbTime::format($this->clock->now()->modify('-120 seconds'))) {
+                    return $row;
+                }
+                if (!$this->current($ctx, $source, $itemId, $row) || $row['provider'] !== $this->provider->name() || (string) $row['started_at'] < DbTime::format($this->clock->now()->modify('-900 seconds'))) {
+                    $this->finish($ctx, $source, $itemId, $jobId, null, 'Задание устарело или превышено время ожидания. Создайте новое задание.');
+                    $row['status'] = 'failed';
+                    return $row;
+                }
+                $this->db->execute('UPDATE source_video_generations SET poll_claimed_at = ? WHERE workspace_id = ? AND public_id = ?', [DbTime::format($this->clock->now()), $ctx->workspaceId, $jobId]);
+                $row['polling'] = true;
+                $row['claimed'] = true;
+                return $row;
+            }
             if ($row['status'] !== 'pending') {
                 return $row;
             }
@@ -126,17 +148,42 @@ final class VideoWorkflow
         try {
             $settings = VideoSettings::fromInput(json_decode((string) $attempt['settings_json'], true, 32, JSON_THROW_ON_ERROR));
             $basis = json_decode((string) $attempt['basis_json'], true, 32, JSON_THROW_ON_ERROR);
-            $result = $this->provider->generate(new VideoInput($jobId, $settings->aspectRatio, $settings->duration, $settings->instruction, (string) $basis['text'], $basis['image']))->snapshot();
+            $input = new VideoInput($jobId, $settings->aspectRatio, $settings->duration, $settings->instruction, (string) $basis['text'], $basis['image']);
+            if ($this->provider instanceof \App\Integrations\Video\AsyncVideoProvider) {
+                if (!isset($attempt['polling'])) {
+                    $remoteId = $this->provider->start($input);
+                    if (preg_match('/^[a-z0-9]{1,64}$/D', $remoteId) !== 1) {
+                        throw new \RuntimeException('Invalid provider job ID');
+                    }
+                    $this->db->execute('UPDATE source_video_generations SET provider_job_id = ?, provider_metadata_json = ? WHERE workspace_id = ? AND source_id = ? AND public_id = ? AND status = ?', [$remoteId, json_encode($this->providerMetadata(), JSON_THROW_ON_ERROR), $ctx->workspaceId, $source->id, $jobId, 'processing']);
+                    return 'processing';
+                }
+                $output = $this->provider->poll((string) $attempt['provider_job_id'], $jobId);
+                if ($output === null) {
+                    $this->releasePoll($ctx, $jobId);
+                    return 'processing';
+                }
+                $result = $output->snapshot();
+            } else {
+                $result = $this->provider->generate($input)->snapshot();
+            }
+        } catch (\App\Integrations\ContentProviders\ProviderException $e) {
+            if (isset($attempt['polling']) && $e->retryable) {
+                $this->releasePoll($ctx, $jobId);
+                return 'processing';
+            }
+            $error = 'Генерация не удалась. Проверьте задание у провайдера перед повторной попыткой.';
         } catch (Throwable) {
-            $error = 'Генерация не удалась. Создайте новое задание и повторите попытку.';
+            $error = $this->provider instanceof \App\Integrations\Video\AsyncVideoProvider ? 'Запуск или сохранение не подтверждены. Проверьте задание у провайдера перед повторной генерацией.' : 'Генерация не удалась. Создайте новое задание и повторите попытку.';
         }
-        return $this->db->transaction(function () use ($ctx, $source, $itemId, $jobId, $attempt, $result, $error): string {
+        $metadata = $this->providerMetadata();
+        return $this->db->transaction(function () use ($ctx, $source, $itemId, $jobId, $attempt, $result, $error, $metadata): string {
             $this->lock($ctx, $source);
             if (!$this->current($ctx, $source, $itemId, $attempt)) {
                 $result = null;
                 $error = 'Материал, решение отбора или основа изменились. Создайте новое задание.';
             }
-            return $this->finish($ctx, $source, $itemId, $jobId, $result, $error);
+            return $this->finish($ctx, $source, $itemId, $jobId, $result, $error, $metadata);
         });
     }
 
@@ -168,12 +215,25 @@ final class VideoWorkflow
         });
     }
 
-    /** @param array<string,mixed>|null $result */
-    private function finish(WorkspaceContext $ctx, Source $source, string $itemId, string $jobId, ?array $result, ?string $error): string
+    /** @return array<string,mixed> */
+    private function providerMetadata(): array
+    {
+        return $this->provider instanceof \App\Integrations\ContentProviders\ProviderMetadata ? $this->provider->metadata() : [];
+    }
+    private function releasePoll(WorkspaceContext $ctx, string $jobId): void
+    {
+        $this->db->execute('UPDATE source_video_generations SET poll_claimed_at = NULL, provider_metadata_json = ?, updated_at = ? WHERE workspace_id = ? AND public_id = ? AND status = ?', [json_encode($this->providerMetadata(), JSON_THROW_ON_ERROR), DbTime::format($this->clock->now()), $ctx->workspaceId, $jobId, 'processing']);
+    }
+
+    /**
+     * @param array<string,mixed>|null $result
+     * @param array<string,mixed> $metadata
+     */
+    private function finish(WorkspaceContext $ctx, Source $source, string $itemId, string $jobId, ?array $result, ?string $error, array $metadata = []): string
     {
         $status = $error === null ? 'completed' : 'failed';
         $now = DbTime::format($this->clock->now());
-        $this->db->execute('UPDATE source_video_generations SET status = ?, result_json = ?, error = ?, finished_at = ?, updated_at = ? WHERE workspace_id = ? AND source_id = ? AND public_id = ?', [$status, $result === null ? null : json_encode($result, JSON_THROW_ON_ERROR), $error, $now, $now, $ctx->workspaceId, $source->id, $jobId]);
+        $this->db->execute('UPDATE source_video_generations SET provider_metadata_json = ?, poll_claimed_at = NULL, status = ?, result_json = ?, error = ?, finished_at = ?, updated_at = ? WHERE workspace_id = ? AND source_id = ? AND public_id = ?', [json_encode($metadata, JSON_THROW_ON_ERROR), $status, $result === null ? null : json_encode($result, JSON_THROW_ON_ERROR), $error, $now, $now, $ctx->workspaceId, $source->id, $jobId]);
         $this->audit->record('source.video_' . $status, $ctx->userId, 'source_item', $itemId, [], $ctx->workspaceId);
         return $status;
     }

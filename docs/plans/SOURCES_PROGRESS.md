@@ -33,7 +33,7 @@
 
 ## Этап 3 из 3 — полная автоматизация
 
-**Подэтап 3.1 completed / завершён и проверен; остальные production-подэтапы не начаты.**
+**Подэтапы 3.1 и 3.2 completed / завершены. Live smoke OpenAI/TinEye/Replicate перенесён в 3.5. Следующий подэтап — 3.3 Automation; он пока не начат.**
 
 - Полная end-to-end автоматизация от Source и отбора до обработанного материала и публикации.
 - Интеграция с существующими PostDraft / scheduler / publishing без переписывания текущего pipeline.
@@ -130,10 +130,18 @@ Reader: **35 автономных тестов**, отдельный успеш�
 
 ContentDraftService, content_post_origins (migration 28), ContentOriginGuard: [архитектура](../architecture/modules/content-drafts.md). Актуальный approved Source/Discovery материал, выбранный text attempt и image/video variants превращаются в обычный PostDraft через PostService. Пользователь продолжает работу в существующем редакторе; scheduler/Queue/adapters не переписаны, SourcePublisher отсутствует. Повторный экспорт идемпотентен; ordinary duplication сохраняет origin; stale/rejected/needs_review не проходят экспорт/отправку. Fake video не прикрепляется как настоящий файл. Новые внешние providers, Telegram login и live-проверки не запускались.
 
-Production debt: реальные providers, постоянный polling, live photo transfer, retention/quotas/recovery и координация deployment rollback. MySQL не может атомарно отменить уже начатый внешний send; используется последний preflight. Экспорт пока ручной; новая ревизия/решение требует свежей обработки и отдельного черновика. Коммит/push в 3.1 не выполняются; main и резервный stash сохранены.
+Production debt: реальные providers, постоянный polling, live photo transfer, retention/quotas/recovery и координация deployment rollback. MySQL не может атомарно отменить уже начатый внешний send; используется последний preflight. Экспорт пока ручной; новая ревизия/решение требует свежей обработки и отдельного черновика. 3.1 опубликован отдельным checkpoint 792979920a9c6792f0a2f2e0f571d4d55df8c911; main и резервный stash сохранены.
 
 Проверки 3.1: **17 новых E2E/feature tests / 150 assertions**; полный PHP suite — **1928 tests / 38195 assertions**, успешно. ContentDraftService PCOV 94.12%, ContentOriginGuard 90.24%. Reader — 52 автономных tests и 2 отдельных HTTP contracts, успешно. PHPStan level 8 + strict rules, Ruff, стиль, CSS build, composer audit (0 advisories), phpDocumentor и /healthz (DB/Redis ok) — успешно. Миграция 28 применена локально, rollback/replay на app_test проверен, включая отмену queued и запрет rollback во время sending. UI/axe: Source material, Discovery material, ordinary editor — 18 screenshots (375/768/1440 × light/dark), дополнительный axe на 360px, без serious/critical нарушений и horizontal overflow; скриншоты просмотрены. Тестовые fixtures изолированы в app_test; основной consent и live-материалы не менялись. Secrets scan PASS.
 
 ### Stage 3.1 checkpoint
 
 **3.1 completed.** Dedicated Git checkpoint contains only content-to-draft integration, guards, UI, tests and documentation. Local secrets, runtime files and .DS_Store are excluded. Stage 3.2 starts only after this checkpoint is pushed successfully.
+
+### 3.2 — Real providers
+
+Adapters implemented through existing interfaces: OpenAI Responses (Text + Semantic), TinEye v2 image search, Replicate Real-ESRGAN enhancement, async Replicate Seedance video. Fake retained; no Discovery polling or publishing rewrite. Provider metadata migration 29, durable remote video IDs and guarded status checks. Credentials absent locally: mocked contracts/automated regression only, live smoke OpenAI/TinEye/Replicate deferred to the final Stage 3.5 by owner decision. **3.2 completed**, accepted on adapters, synthetic contracts and mocked HTTP. See [operations and limitations](../architecture/modules/content-real-providers.md). Do not treat mock tests as confirmation of account access or paid provider availability.
+
+Проверки 3.2: полный PHP suite — **1985 tests / 38363 assertions**, успешно; **39 mocked provider contract/unit tests / 108 assertions**, шесть новых workflow/feature tests и 12 config activation tests; PCOV новых adapter classes 85–100%. Reader: 52 автономных tests и 2 отдельных PHP HTTP contracts (включая фото/ACK/restart), успешно. PHPStan level 8 + strict rules, Ruff 0.14.1, code style, composer audit (0 advisories), миграция 29 и rollback/replay на app_test, /healthz (DB/Redis ok) — успешно. Video UI/axe: 375/768/1440 × light/dark плюс 360px axe, без blocking issues; скриншоты просмотрены. Первый временный UI server дал navigation timeout, повторный прогон успешен. Private env-value scan PASS; placeholders в .env.example не являются credentials. 3.2 завершён и фиксируется отдельным checkpoint в feature-ветке; stash@{0} сохранён. Main, publishing, billing и telegram-reader не изменены. Live платные вызовы не выполнялись; credentials намеренно не подключены. Проверки реальных OpenAI/TinEye/Replicate перенесены в 3.5. Следующий подэтап — 3.3 Automation, в этой фиксации не начинается.
+
+Owner acceptance: Stage 3.2 is complete on automated/mocked verification. Real adapters require both explicit provider selection and corresponding non-empty env credentials; selecting a real provider without credentials fails configuration safely. Merely adding credentials does not switch Fake providers on its own. Fake remains the dev/test default. No keys requested or connected. Live smoke is a tracked Stage 3.5 task, not a blocker for this checkpoint.

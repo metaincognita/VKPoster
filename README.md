@@ -50,3 +50,9 @@ make check  # cs + stan + test + audit + docs
 - [docs/CHANGELOG.md](docs/CHANGELOG.md)
 
 Разработка ведётся этапами: ветка `stage-NN-slug` → PR → зелёный CI → squash-merge в `main`. В `main` напрямую не коммитим.
+
+### Real content providers
+
+Stage 3.2 adapters are opt-in via ignored env credentials; Fake remains the default. Configuration, costs, video status checks and safety limits: [provider guide](docs/architecture/modules/content-real-providers.md). No credentials are shipped.
+
+Stage 3.2 is accepted on mocked HTTP/contracts. Real integrations need explicit selection plus corresponding env credentials; absent credentials prevent activation. OpenAI/TinEye/Replicate live smoke is deferred to Stage 3.5; Fake remains the dev/test default.

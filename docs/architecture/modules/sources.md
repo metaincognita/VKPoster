@@ -136,3 +136,7 @@ Radar discovers metadata independently of user Sources. An explicit gateway impo
 ## Stage 3.1 — PostDraft boundary
 
 Current approved materials export through ContentDraftService into ordinary PostService drafts, with pinned provenance/revisions and idempotency. Source and input material remain immutable; PostService/Publisher preflight blocks stale or rejected origins. Images enter MediaService at export; Fake video has no publishable file. See [Content drafts](content-drafts.md).
+
+## Stage 3.2 provider adapters
+
+Existing processing/selection interfaces now have opt-in real HTTP adapters, preserved Fake implementations and durable video polling. See [Content real providers](content-real-providers.md) for env, contracts, safety and limitations. No changes to reader or publishing algorithms.

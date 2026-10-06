@@ -1,0 +1,9 @@
+{
+  "id": "testprediction",
+  "status": "succeeded",
+  "output": "https://cdn.example.org/output.mp4",
+  "version": "fixtureversion",
+  "metrics": {
+    "predict_time": 2.5
+  }
+}

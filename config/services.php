@@ -341,18 +341,24 @@ return static function (Container $c, string $base): void {
         );
     });
 
-    $c->factory(\App\Integrations\Ai\TextProvider::class, static fn (Container $c): \App\Integrations\Ai\TextProvider => new \App\Integrations\Ai\FakeTextProvider(!$c->get(Config::class)->isProduction()));
+    $c->factory(\App\Integrations\Ai\OpenAiResponses::class, static fn (Container $c): \App\Integrations\Ai\OpenAiResponses => new \App\Integrations\Ai\OpenAiResponses($c->get(\App\Integrations\ContentProviders\ProviderHttp::class), $c->get(Config::class)->string('content_providers.openai_key'), $c->get(Config::class)->string('content_providers.openai_model')));
+    $c->factory(\App\Integrations\ContentProviders\ReplicateApi::class, static fn (Container $c): \App\Integrations\ContentProviders\ReplicateApi => new \App\Integrations\ContentProviders\ReplicateApi($c->get(\App\Integrations\ContentProviders\ProviderHttp::class), $c->get(Config::class)->string('content_providers.replicate_token')));
+    $c->factory(\App\Integrations\Images\TinEyeImageSearchProvider::class, static fn (Container $c): \App\Integrations\Images\TinEyeImageSearchProvider => new \App\Integrations\Images\TinEyeImageSearchProvider($c->get(\App\Integrations\ContentProviders\ProviderHttp::class), $c->get(\App\Integrations\ContentProviders\SafeDownloads::class), $c->get(Config::class)->string('content_providers.tineye_key')));
 
-    $c->factory(\App\Integrations\Selection\SemanticSelectionProvider::class, static fn (Container $c): \App\Integrations\Selection\SemanticSelectionProvider => new \App\Integrations\Selection\FakeSemanticSelectionProvider(!$c->get(Config::class)->isProduction()));
+    $c->factory(\App\Integrations\Ai\TextProvider::class, static fn (Container $c): \App\Integrations\Ai\TextProvider => $c->get(Config::class)->string('content_providers.text') === 'openai' ? $c->get(\App\Integrations\Ai\OpenAiTextProvider::class) : new \App\Integrations\Ai\FakeTextProvider(!$c->get(Config::class)->isProduction()));
+
+    $c->factory(\App\Integrations\Selection\SemanticSelectionProvider::class, static fn (Container $c): \App\Integrations\Selection\SemanticSelectionProvider => $c->get(Config::class)->string('content_providers.semantic') === 'openai' ? $c->get(\App\Integrations\Selection\OpenAiSemanticSelectionProvider::class) : new \App\Integrations\Selection\FakeSemanticSelectionProvider(!$c->get(Config::class)->isProduction()));
     $c->factory(\App\Integrations\Discovery\DiscoveryProviders::class, static fn (Container $c): \App\Integrations\Discovery\DiscoveryProviders => new \App\Integrations\Discovery\DiscoveryProviders([
         new \App\Integrations\Discovery\FakeTelegramDiscoveryProvider(!$c->get(Config::class)->isProduction()),
         new \App\Integrations\Discovery\FakeWebNewsDiscoveryProvider(!$c->get(Config::class)->isProduction()),
         new \App\Integrations\Discovery\FakeSocialDiscoveryProvider(!$c->get(Config::class)->isProduction()),
     ]));
 
-    $c->factory(\App\Integrations\Video\VideoProvider::class, static fn (Container $c): \App\Integrations\Video\VideoProvider => new \App\Integrations\Video\FakeVideoProvider(!$c->get(Config::class)->isProduction()));
-    $c->factory(\App\Integrations\Images\ImageSearchProvider::class, static fn (): \App\Integrations\Images\ImageSearchProvider => new \App\Integrations\Images\FakeImageSearchProvider());
-    $c->factory(\App\Integrations\Images\ImageEnhancementProvider::class, static fn (Container $c): \App\Integrations\Images\ImageEnhancementProvider => new \App\Integrations\Images\FakeImageEnhancementProvider(!$c->get(Config::class)->isProduction()));
+    $c->factory(\App\Integrations\Video\VideoProvider::class, static fn (Container $c): \App\Integrations\Video\VideoProvider => $c->get(Config::class)->string('content_providers.video') === 'replicate' ? $c->get(\App\Integrations\Video\ReplicateVideoProvider::class) : new \App\Integrations\Video\FakeVideoProvider(!$c->get(Config::class)->isProduction()));
+    $c->factory(\App\Integrations\Images\ImageSearchProvider::class, static fn (Container $c): \App\Integrations\Images\ImageSearchProvider => $c->get(Config::class)->string('content_providers.image_search') === 'tineye' ? $c->get(\App\Integrations\Images\TinEyeImageSearchProvider::class) : new \App\Integrations\Images\FakeImageSearchProvider());
+    $c->factory(\App\Integrations\Images\ImageEnhancementProvider::class, static fn (Container $c): \App\Integrations\Images\ImageEnhancementProvider => match ($c->get(Config::class)->string('content_providers.image_enhancement')) {
+        'replicate' => $c->get(\App\Integrations\Images\ReplicateImageEnhancementProvider::class), 'disabled' => new \App\Integrations\Images\DisabledImageEnhancementProvider(), default => new \App\Integrations\Images\FakeImageEnhancementProvider(!$c->get(Config::class)->isProduction())
+    });
 
     $c->factory(HealthCheck::class, static fn (Container $c): HealthCheck => new HealthCheck($c->get(Config::class)->env()->all()));
 

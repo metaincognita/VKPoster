@@ -60,3 +60,9 @@ Separate provider-neutral video jobs, approved/revision/basis guards, versioned 
 ## 2026-10-06 — Content Discovery / Trend Radar Core (2.5)
 
 Independent Fake Telegram/WebNews/Social metadata discovery, canonical dedupe, heuristic story clusters, transparent six-component 0–100 scoring, Radar UI, ignore/import and explicit current-approved content-processing boundary. No commercial APIs, protected article bodies, AI or publishing.
+
+## Stage 3.2 — real provider adapters
+
+Opt-in OpenAI Responses text/semantic, TinEye reverse search, Replicate Real-ESRGAN and async Seedance adapters; immutable metadata histories and remote video IDs/poll leases; bounded safe HTTP/downloads; synthetic mocked contracts; Fake retained. Stage 3.2 completed on mocked contracts; eligible credentials and live smoke deferred to Stage 3.5.
+
+Stage 3.2 is accepted on mocked HTTP/contracts. Real integrations need explicit selection plus corresponding env credentials; absent credentials prevent activation. OpenAI/TinEye/Replicate live smoke is deferred to Stage 3.5; Fake remains the dev/test default.

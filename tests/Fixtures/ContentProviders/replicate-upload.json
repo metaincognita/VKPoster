@@ -1,0 +1,6 @@
+{
+  "id": "testfile",
+  "urls": {
+    "get": "https://api.replicate.com/v1/files/testfile"
+  }
+}

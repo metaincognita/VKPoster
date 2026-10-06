@@ -269,8 +269,11 @@ final class SourceImageProcessingTest extends SourceSelectionTestCase
     public function testMigrationReplay(): void
     {
         $migration = require TestEnv::basePath() . '/database/migrations/2026_10_06_000024_create_source_image_processing.php';
+        $providers = require TestEnv::basePath() . '/database/migrations/2026_10_06_000029_add_content_provider_metadata.php';
+        $providers->down($this->db);
         $migration->down($this->db);
         $migration->up($this->db);
+        $providers->up($this->db);
         self::assertSame(0, $this->db->table('source_image_variants')->count());
     }
 }

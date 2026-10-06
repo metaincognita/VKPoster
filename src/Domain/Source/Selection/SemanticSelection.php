@@ -105,11 +105,13 @@ final class SemanticSelection
         }
         $now = DbTime::format($this->clock->now());
         $row = ['workspace_id' => $workspaceId, 'scope_key' => self::scope($sourceId), 'origin_type' => $origin, 'origin_id' => $id, 'revision_hash' => $revision, 'deterministic_hash' => $detHash, 'settings_version' => $settings['version'], 'settings_snapshot_json' => json_encode($settings['settings']->snapshot(), JSON_THROW_ON_ERROR), 'provider' => $this->provider->name(), 'status' => 'blocked', 'deterministic_status' => $deterministic->status, 'deterministic_reason' => $deterministic->reason, 'deterministic_rule' => $deterministic->rule, 'final_decision' => $deterministic->status, 'final_reason' => $deterministic->reason, 'created_at' => $now, 'finished_at' => $now];
+        $called = false;
         if ($deterministic->status === 'approved') {
             try {
                 if (mb_strlen($input->text) > 100000) {
                     throw new \RuntimeException('Material exceeds semantic input limit');
                 }
+                $called = true;
                 $result = $this->provider->evaluate($input);
                 $final = $this->policy->combine($deterministic, $result, $settings['settings']);
                 $row += ['decision' => $result->decision, 'score' => $result->score, 'confidence' => $result->confidence, 'reason' => $result->reason, 'matched_criteria_json' => json_encode($result->matchedCriteria, JSON_THROW_ON_ERROR), 'review_flags_json' => json_encode($result->reviewFlags, JSON_THROW_ON_ERROR)];
@@ -124,6 +126,9 @@ final class SemanticSelection
                 $row['final_reason'] = 'Смысловая оценка не выполнена. Нужна ручная проверка.';
                 $row['error'] = 'Смысловая оценка не выполнена. Проверьте материал вручную или сохраните настройки для новой попытки.';
             }
+        }
+        if ($called && $this->provider instanceof \App\Integrations\ContentProviders\ProviderMetadata) {
+            $row['provider_metadata_json'] = json_encode($this->provider->metadata(), JSON_THROW_ON_ERROR);
         }
         $this->db->table('semantic_selection_evaluations')->insert($row);
         return $this->db->select('SELECT * FROM semantic_selection_evaluations WHERE workspace_id = ? AND id = ?', [$workspaceId, (int) $this->db->lastInsertId()])[0];

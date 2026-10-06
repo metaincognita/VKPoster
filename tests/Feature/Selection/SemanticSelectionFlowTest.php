@@ -295,11 +295,14 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         $service->saveSemantic($ctx, $source, new SemanticSettings(true, 'AI', 70, 0.8, 'review'));
         $this->ingest($source, [$this->message(10, 'AI')]);
         $migration = require TestEnv::basePath() . '/database/migrations/2026_10_06_000027_create_semantic_selection.php';
+        $providers = require TestEnv::basePath() . '/database/migrations/2026_10_06_000029_add_content_provider_metadata.php';
+        $providers->down($this->db);
         $migration->down($this->db);
         self::assertSame([], $this->db->select('SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', ['semantic_selection_settings']));
         self::assertSame(1, $this->db->table('source_items')->count());
         self::assertSame('needs_review', $this->decision()['selection_status']);
         $migration->up($this->db);
+        $providers->up($this->db);
         self::assertSame(0, $this->db->table('semantic_selection_settings')->count());
         self::assertSame(0, $this->db->table('semantic_selection_evaluations')->count());
     }

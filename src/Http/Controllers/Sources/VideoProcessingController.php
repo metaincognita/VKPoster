@@ -22,7 +22,7 @@ use App\Kernel\View\View;
 /** Thin workspace video UI; generation and snapshot checks belong to the independent domain module. */
 final class VideoProcessingController
 {
-    public function __construct(private readonly SourceRepository $sources, private readonly MaterialRepository $materials, private readonly ImageRepository $images, private readonly VideoRepository $videos, private readonly VideoWorkflow $workflow, private readonly View $view, private readonly FormFlash $flash)
+    public function __construct(private readonly SourceRepository $sources, private readonly MaterialRepository $materials, private readonly ImageRepository $images, private readonly VideoRepository $videos, private readonly VideoWorkflow $workflow, private readonly View $view, private readonly FormFlash $flash, private readonly \App\Kernel\Config $config)
     {
     }
     public function show(Request $request): Response
@@ -57,7 +57,7 @@ final class VideoProcessingController
             $run['settings'] = json_decode((string) $run['settings_json'], true, 32, JSON_THROW_ON_ERROR);
         }
         unset($run);
-        return $this->view->response('workspace/sources/videos.twig', ['workspace' => $ctx, 'source' => $source, 'material' => $item, 'revision' => $revision, 'approved' => $approved, 'texts' => $texts, 'images' => $images, 'history' => $history, 'settings' => VideoSettings::fromInput([])->form(), 'base' => '/w/' . $ctx->workspacePublicId . '/sources/' . $source->publicId . '/items/' . $itemId]);
+        return $this->view->response('workspace/sources/videos.twig', ['workspace' => $ctx, 'source' => $source, 'material' => $item, 'revision' => $revision, 'approved' => $approved, 'texts' => $texts, 'images' => $images, 'fake_provider' => $this->config->string('content_providers.video', 'fake') === 'fake', 'history' => $history, 'settings' => VideoSettings::fromInput([])->form(), 'base' => '/w/' . $ctx->workspacePublicId . '/sources/' . $source->publicId . '/items/' . $itemId]);
     }
     public function request(Request $request): Response
     {
@@ -80,13 +80,13 @@ final class VideoProcessingController
         try {
             if ($action === 'request') {
                 $this->workflow->request($ctx, $source, $itemId, WorkspaceRequest::text($request->input('revision')), VideoSettings::fromInput($request->body));
-                $this->flash->toast('Задание создано. Запустите демонстрацию в истории.', 'success');
+                $this->flash->toast('Задание создано. Запустите генерацию в истории.', 'success');
             } elseif ($action === 'run') {
                 $status = $this->workflow->run($ctx, $source, $itemId, WorkspaceRequest::text($request->input('job')));
-                $this->flash->toast($status === 'completed' ? 'Демонстрация завершена. Настоящее видео не создавалось.' : 'Состояние задания: ' . ($status === 'processing' ? 'выполняется' : 'ошибка. Подробности — в истории.'), $status === 'completed' ? 'success' : 'error');
+                $this->flash->toast($status === 'completed' ? 'Обработка завершена. Результат доступен в истории.' : 'Состояние задания: ' . ($status === 'processing' ? 'выполняется' : 'ошибка. Подробности — в истории.'), $status === 'failed' ? 'error' : 'success');
             } else {
                 $this->workflow->choose($ctx, $source, $itemId, WorkspaceRequest::text($request->input('job')));
-                $this->flash->toast('Итоговая версия выбрана. Сейчас это демонстрационный результат.', 'success');
+                $this->flash->toast('Итоговая версия выбрана.', 'success');
             }
         } catch (SourceException $e) {
             $safe = [];

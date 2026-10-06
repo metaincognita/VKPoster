@@ -1,0 +1,22 @@
+{
+  "status": "completed",
+  "output": [
+    {
+      "type": "message",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"text\": \"Обработанный текст\"}"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 1000,
+    "output_tokens": 300,
+    "total_tokens": 1300,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    }
+  }
+}

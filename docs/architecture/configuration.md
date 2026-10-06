@@ -91,3 +91,9 @@
 ## Внутренний Sources reader
 
 `SOURCES_READER_SECRET` — отдельный общий секрет PHP/reader, минимум 32 случайных символа; пустое значение выключает API. В конфигурации reader: `VKPOSTER_INTERNAL_URL` (локально `http://host.docker.internal:8080`). Telegram API credentials, телефон и session остаются только у reader. Не передавать их браузеру или PHP. После изменения `.env` пересоздать app; session volume reader сохраняется.
+
+### Content provider opt-in
+
+`config/content_providers.php` reads `CONTENT_TEXT_PROVIDER`, `CONTENT_SEMANTIC_PROVIDER` (fake/openai), `CONTENT_IMAGE_SEARCH_PROVIDER` (fake/tineye), `CONTENT_IMAGE_ENHANCEMENT_PROVIDER` (fake/disabled/replicate), `CONTENT_VIDEO_PROVIDER` (fake/replicate). All default to fake. Credentials: `OPENAI_API_KEY`, `TINEYE_API_KEY`, `REPLICATE_API_TOKEN`; configurable `OPENAI_CONTENT_MODEL`. See [real provider operations](modules/content-real-providers.md).
+
+Stage 3.2 is accepted on mocked HTTP/contracts. Real integrations need explicit selection plus corresponding env credentials; absent credentials prevent activation. OpenAI/TinEye/Replicate live smoke is deferred to Stage 3.5; Fake remains the dev/test default.

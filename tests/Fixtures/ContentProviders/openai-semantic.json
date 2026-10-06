@@ -1,0 +1,19 @@
+{
+  "status": "completed",
+  "output": [
+    {
+      "type": "message",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"decision\": \"approved\", \"score\": 92, \"confidence\": 0.95, \"reason\": \"Соответствует критериям.\", \"matched_criteria\": [\"AI\"], \"review_flags\": []}"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 1000,
+    "output_tokens": 150,
+    "total_tokens": 1150
+  }
+}

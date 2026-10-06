@@ -381,3 +381,7 @@ Migration 26 adds discovery_items, discovery_clusters, discovery_item_keys, disc
 ## Content draft provenance (Sources 3.1)
 
 Migration 28 adds content_post_origins: workspace, nullable item/post/text-processing FKs with deletion tombstones, revision/selection hashes, workspace-unique idempotency key, immutable processing/media/Discovery snapshot, actor and UTC creation time. Rollback refuses active sending, cancels linked queued publications and resets linked scheduled posts. See [Content drafts](modules/content-drafts.md).
+
+### Stage 3.2 provider metadata (migration 29)
+
+Nullable `provider_metadata_json` on `source_text_processings`, `semantic_selection_evaluations`, `source_image_variants`, `source_video_generations` stores allowlisted model/usage/technical metadata. `source_video_generations.provider_job_id` is the durable opaque remote prediction ID; `poll_claimed_at` is a reclaimable polling lease. These fields contain no credentials, prompt text or signed download URLs.

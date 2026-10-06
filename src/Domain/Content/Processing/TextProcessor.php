@@ -10,6 +10,9 @@ use RuntimeException;
 /** Text-only transformations and deterministic output constraints; no storage, selection or publishing. */
 final class TextProcessor
 {
+    /** @var array<string,mixed> */
+    private array $usage = [];
+
     public function __construct(private readonly TextProvider $provider)
     {
     }
@@ -19,9 +22,16 @@ final class TextProcessor
         return $settings->mode === 'unchanged' ? 'local' : $this->provider->name();
     }
 
+    /** @return array<string,mixed> */
+    public function providerMetadata(TextSettings $settings): array
+    {
+        return $this->usage;
+    }
+
     /** @param list<array<string, mixed>> $messages */
     public function process(string $original, array $messages, string $username, TextSettings $settings): string
     {
+        $this->usage = [];
         $input = $original;
         if ($messages !== []) {
             $parts = [];
@@ -61,7 +71,14 @@ final class TextProcessor
             $input = implode("\n", array_filter($parts, static fn (string $t): bool => $t !== ''));
         }
         $input = $this->constrain($input, $username, $settings, false);
-        $output = $settings->mode === 'unchanged' ? $input : $this->provider->generate($input, $settings);
+        $output = $input;
+        if ($settings->mode !== 'unchanged') {
+            try {
+                $output = $this->provider->generate($input, $settings);
+            } finally {
+                $this->usage = $this->provider instanceof \App\Integrations\ContentProviders\ProviderMetadata ? $this->provider->metadata() : [];
+            }
+        }
         if (!mb_check_encoding($output, 'UTF-8') || strlen($output) > 200000) {
             throw new RuntimeException('Invalid text output');
         }

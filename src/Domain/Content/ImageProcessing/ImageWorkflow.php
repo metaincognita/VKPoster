@@ -167,7 +167,7 @@ final class ImageWorkflow
                             continue;
                         }
                         $match = $this->analysis->match($original, $data);
-                        $variants[] = $this->variant($ctx->workspaceId, $path, $data, 'candidate', $candidate->sourceUrl, $this->search->name(), $match);
+                        $variants[] = $this->variant($ctx->workspaceId, $path, $data, 'candidate', $candidate->sourceUrl, $this->search->name(), $match, $candidate->metadata);
                     } catch (\Throwable) {
                         $warnings[] = 'Одна из найденных копий не прошла техническую проверку.';
                     }
@@ -178,7 +178,7 @@ final class ImageWorkflow
                         $path = $this->files->temporary($enhanced);
                         $paths[] = $path;
                         $data = $this->analysis->inspect($path);
-                        $variants[] = $this->variant($ctx->workspaceId, $path, $data, 'enhanced', null, $this->enhancement->name(), $this->analysis->match($original, $data));
+                        $variants[] = $this->variant($ctx->workspaceId, $path, $data, 'enhanced', null, $this->enhancement->name(), $this->analysis->match($original, $data), $this->enhancement instanceof \App\Integrations\ContentProviders\ProviderMetadata ? $this->enhancement->metadata() : []);
                     }
                 } catch (\Throwable) {
                     $warnings[] = 'Enhancement недоступен.';
@@ -235,11 +235,12 @@ final class ImageWorkflow
     /**
      * @param array<string,mixed> $data
      * @param array<string,mixed> $verification
+     * @param array<string,mixed> $metadata
      * @return array<string,scalar|null>
      */
-    private function variant(int $workspaceId, string $path, array $data, string $kind, ?string $url, string $provider, array $verification): array
+    private function variant(int $workspaceId, string $path, array $data, string $kind, ?string $url, string $provider, array $verification, array $metadata = []): array
     {
-        return array_merge($this->files->save($workspaceId, $path), ['public_id' => (string) new Ulid(), 'kind' => $kind, 'width' => (int) $data['width'], 'height' => (int) $data['height'], 'mime' => (string) $data['mime'], 'bytes' => (int) $data['bytes'], 'quality' => (string) $data['quality'], 'metrics_json' => json_encode(array_merge($data['metrics'], ['perceptual_hash' => $data['hash']]), JSON_THROW_ON_ERROR), 'source_url' => $url, 'verification' => (string) $verification['status'], 'confidence' => isset($verification['confidence']) ? (float) $verification['confidence'] : null, 'verification_json' => json_encode($verification, JSON_THROW_ON_ERROR), 'provider' => $provider]);
+        return array_merge($this->files->save($workspaceId, $path), ['public_id' => (string) new Ulid(), 'kind' => $kind, 'width' => (int) $data['width'], 'height' => (int) $data['height'], 'mime' => (string) $data['mime'], 'bytes' => (int) $data['bytes'], 'quality' => (string) $data['quality'], 'metrics_json' => json_encode(array_merge($data['metrics'], ['perceptual_hash' => $data['hash']]), JSON_THROW_ON_ERROR), 'source_url' => $url, 'verification' => (string) $verification['status'], 'confidence' => isset($verification['confidence']) ? (float) $verification['confidence'] : null, 'verification_json' => json_encode($verification, JSON_THROW_ON_ERROR), 'provider' => $provider, 'provider_metadata_json' => json_encode($metadata, JSON_THROW_ON_ERROR)]);
     }
 
     /**
