@@ -30,6 +30,7 @@ final class AuditActions
         'source.video_completed' => 'Генерация видео завершена',
         'source.video_failed' => 'Ошибка генерации видео',
         'source.video_selected' => 'Выбрана итоговая версия видео',
+        'content.automation_settings_updated' => 'Изменены настройки автоматизации материалов',
         'content.draft_created' => 'Создан черновик из материала',
         'source.text_started' => 'Начата обработка текста',
         'source.text_completed' => 'Текст обработан',

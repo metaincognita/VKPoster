@@ -16,10 +16,9 @@ return static function (Env $env): array {
         $result[$name] = $value;
     }
     $credentials = ['openai_key' => $env->string('OPENAI_API_KEY'), 'openai_model' => $env->string('OPENAI_CONTENT_MODEL', 'gpt-5.4-mini-2026-03-17'), 'tineye_key' => $env->string('TINEYE_API_KEY'), 'replicate_token' => $env->string('REPLICATE_API_TOKEN')];
-    foreach (['text' => 'openai_key', 'semantic' => 'openai_key', 'image_search' => 'tineye_key', 'image_enhancement' => 'replicate_token', 'video' => 'replicate_token'] as $name => $credential) {
-        if (!in_array($result[$name], ['fake', 'disabled'], true) && trim($credentials[$credential]) === '') {
-            throw new ConfigException('Selected content provider requires local env credentials.');
-        }
+    // Missing credentials disable execution at the adapter/automation boundary, not the whole app.
+    foreach (['openai_key', 'tineye_key', 'replicate_token'] as $key) {
+        $credentials[$key] = trim($credentials[$key]);
     }
     return $result + $credentials;
 };

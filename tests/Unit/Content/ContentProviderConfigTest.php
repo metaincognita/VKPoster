@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Content;
 
 use App\Kernel\Config;
-use App\Kernel\Exception\ConfigException;
 use App\Tests\Support\TestEnv;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -32,8 +31,9 @@ final class ContentProviderConfigTest extends TestCase
     #[DataProvider('providers')]
     public function testRealSelectionRequiresItsCredential(string $name, string $provider, string $credential): void
     {
-        $this->expectException(ConfigException::class);
-        Config::load(TestEnv::basePath() . '/config', TestEnv::env(['CONTENT_' . $name . '_PROVIDER' => $provider, $credential => '  ']));
+        $config = Config::load(TestEnv::basePath() . '/config', TestEnv::env(['CONTENT_' . $name . '_PROVIDER' => $provider, $credential => '  ']));
+        self::assertFalse((new \App\Domain\Content\Automation\AutomationGuard($config))->allows(strtolower($name)));
+        self::assertSame($provider, $config->string('content_providers.' . strtolower($name)));
     }
     #[DataProvider('providers')]
     public function testExplicitSelectionAndCredentialEnableRealAdapterConfig(string $name, string $provider, string $credential): void

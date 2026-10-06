@@ -16,7 +16,7 @@ use Throwable;
 /** Optional layer of existing Selection: immutable revision/policy history, safe failures and no source-content mutation. */
 final class SemanticSelection
 {
-    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly SemanticSelectionProvider $provider, private readonly SemanticPolicy $policy)
+    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly SemanticSelectionProvider $provider, private readonly SemanticPolicy $policy, private readonly \App\Domain\Content\Automation\AutomationPolicies $automation)
     {
     }
     public static function scope(?int $sourceId): string
@@ -40,12 +40,12 @@ final class SemanticSelection
      * @param array<string,mixed> $item
      * @param list<array<string,mixed>> $messages
      * @return array<string,mixed>|null */
-    public function materialLocked(int $workspaceId, ?int $sourceId, array $item, array $messages, SelectionResult $deterministic): ?array
+    public function materialLocked(int $workspaceId, ?int $sourceId, array $item, array $messages, SelectionResult $deterministic, bool $automationCall = false): ?array
     {
         $revision = MaterialRepository::revision($item, $messages);
         $candidate = $sourceId === null ? ($this->db->select('SELECT d.title, d.metadata_json FROM discovery_items d JOIN discovery_imports l ON l.discovery_item_id = d.id AND l.workspace_id = d.workspace_id WHERE l.workspace_id = ? AND l.material_id = ?', [$workspaceId, $item['id']])[0] ?? null) : null;
         $input = new SemanticSelectionInput((string) $item['text'], $candidate === null ? null : (string) $candidate['title'], $candidate === null ? ['content_type' => $item['content_type'], 'message_count' => count($messages)] : json_decode((string) $candidate['metadata_json'], true, 32, JSON_THROW_ON_ERROR), $this->settings($workspaceId, $sourceId)['settings']->criteria, $revision);
-        return $this->evaluateLocked($workspaceId, $sourceId, 'material', (int) $item['id'], $revision, $input, $deterministic);
+        return $this->evaluateLocked($workspaceId, $sourceId, 'material', (int) $item['id'], $revision, $input, $deterministic, $automationCall);
     }
     /** Internal discovery command: workspace lock held, independently ranked candidate, never modifies Trend Score.
      * @param array<string,mixed> $item */
@@ -92,10 +92,10 @@ final class SemanticSelection
     }
     /**
      * @return array<string,mixed>|null */
-    private function evaluateLocked(int $workspaceId, ?int $sourceId, string $origin, int $id, string $revision, SemanticSelectionInput $input, SelectionResult $deterministic): ?array
+    private function evaluateLocked(int $workspaceId, ?int $sourceId, string $origin, int $id, string $revision, SemanticSelectionInput $input, SelectionResult $deterministic, bool $automationCall = false): ?array
     {
         $settings = $this->settings($workspaceId, $sourceId);
-        if (!$settings['settings']->enabled) {
+        if (!$settings['settings']->enabled || !$this->automation->semanticAllowed($workspaceId, $sourceId, $automationCall)) {
             return null;
         }
         $detHash = self::deterministicHash($deterministic);

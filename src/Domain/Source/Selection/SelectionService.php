@@ -61,13 +61,16 @@ final class SelectionService
     }
 
     /** Internal ingress only: caller must hold Source FOR UPDATE in the event's transaction before ACK. */
-    public function evaluateLocked(int $workspaceId, int $sourceId, int $itemId): void
+    public function evaluateLocked(int $workspaceId, int $sourceId, int $itemId, bool $automationCall = false): void
     {
         $prior = $this->db->select('SELECT decision_mode FROM source_selection_decisions WHERE workspace_id = ? AND source_id = ? AND item_id = ?', [$workspaceId, $sourceId, $itemId])[0] ?? null;
         $item = $this->db->select('SELECT * FROM source_items WHERE workspace_id = ? AND source_id = ? AND id = ?', [$workspaceId, $sourceId, $itemId])[0] ?? throw new HttpException(404, 'Not found');
         $rawMessages = $this->db->select('SELECT message_id, text, entities_json, media_json, metadata_json, published_at, edited_at, revision_hash FROM source_messages WHERE workspace_id = ? AND source_id = ? AND item_id = ? ORDER BY message_id', [$workspaceId, $sourceId, $itemId]);
         $result = $this->deterministic($workspaceId, $sourceId, $item, $rawMessages);
-        $evaluation = $this->semantic->materialLocked($workspaceId, $sourceId, $item, $rawMessages, $result);
+        if ($automationCall && $prior !== null && $prior['decision_mode'] === 'manual') {
+            return;
+        }
+        $evaluation = $this->semantic->materialLocked($workspaceId, $sourceId, $item, $rawMessages, $result, $automationCall);
         if ($prior !== null && $prior['decision_mode'] === 'manual') {
             return;
         }
@@ -119,16 +122,16 @@ final class SelectionService
     }
 
     /** Caller holds workspace lock; only materials registered through Discovery are eligible. */
-    public function evaluateDiscoveryMaterialLocked(int $workspaceId, int $itemId): void
+    public function evaluateDiscoveryMaterialLocked(int $workspaceId, int $itemId, bool $automatic = false): void
     {
         $item = $this->db->select('SELECT i.* FROM source_items i JOIN discovery_imports l ON l.material_id = i.id AND l.workspace_id = i.workspace_id WHERE i.workspace_id = ? AND i.id = ? AND i.source_id IS NULL', [$workspaceId, $itemId])[0] ?? throw new HttpException(404, 'Not found');
         $deterministic = $this->deterministic($workspaceId, null, $item, []);
-        $evaluation = $this->semantic->materialLocked($workspaceId, null, $item, [], $deterministic);
         $prior = $this->db->select('SELECT decision_mode FROM source_selection_decisions WHERE workspace_id = ? AND item_id = ? AND source_id IS NULL', [$workspaceId, $itemId])[0] ?? null;
         if (($prior['decision_mode'] ?? '') === 'manual') {
             return;
         }
-        $result = $evaluation === null ? new SelectionResult('needs_review', 'Материал из радара ожидает ручного решения.', 'discovery.import') : new SelectionResult((string) $evaluation['final_decision'], (string) $evaluation['final_reason'], 'semantic.' . $evaluation['status']);
+        $evaluation = $this->semantic->materialLocked($workspaceId, null, $item, [], $deterministic, $automatic);
+        $result = $evaluation === null ? ($automatic ? $deterministic : new SelectionResult('needs_review', 'Материал из радара ожидает ручного решения.', 'discovery.import')) : new SelectionResult((string) $evaluation['final_decision'], (string) $evaluation['final_reason'], 'semantic.' . $evaluation['status']);
         $this->write($workspaceId, null, $itemId, $result, 'automatic', null);
     }
 

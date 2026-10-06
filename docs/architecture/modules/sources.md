@@ -140,3 +140,7 @@ Current approved materials export through ContentDraftService into ordinary Post
 ## Stage 3.2 provider adapters
 
 Existing processing/selection interfaces now have opt-in real HTTP adapters, preserved Fake implementations and durable video polling. See [Content real providers](content-real-providers.md) for env, contracts, safety and limitations. No changes to reader or publishing algorithms.
+
+## Automation 3.3
+
+Optional per-Source/Radar policies enqueue the existing Queue through Schedule once a minute; checkpoints and stale/cost guards coordinate existing processing and ContentDraftService. No automatic publishing. [Details and recovery](content-automation.md).

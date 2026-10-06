@@ -21,14 +21,14 @@ use App\Kernel\View\View;
 /** Radar views and guarded commands; discovery, scoring and content import remain independent domain services. */
 final class RadarController
 {
-    public function __construct(private readonly ContentDiscovery $discovery, private readonly DiscoveryRepository $repository, private readonly DiscoveryMaterialGateway $gateway, private readonly MaterialRepository $materials, private readonly ContentProcessor $processor, private readonly View $view, private readonly FormFlash $flash, private readonly \App\Domain\Source\Selection\SemanticSelection $semantic, private readonly \App\Domain\Source\Selection\SelectionService $selectionService, private readonly \App\Domain\Content\Publishing\ContentDraftService $drafts)
+    public function __construct(private readonly ContentDiscovery $discovery, private readonly DiscoveryRepository $repository, private readonly DiscoveryMaterialGateway $gateway, private readonly MaterialRepository $materials, private readonly ContentProcessor $processor, private readonly View $view, private readonly FormFlash $flash, private readonly \App\Domain\Source\Selection\SemanticSelection $semantic, private readonly \App\Domain\Source\Selection\SelectionService $selectionService, private readonly \App\Domain\Content\Publishing\ContentDraftService $drafts, private readonly \App\Domain\Content\Automation\AutomationPolicies $automation)
     {
     }
     public function index(Request $request): Response
     {
         $ctx = WorkspaceRequest::context($request);
         $status = WorkspaceRequest::text($request->query['status'] ?? 'new');
-        return $this->view->response('workspace/radar/index.twig', ['workspace' => $ctx, 'base' => '/w/' . $ctx->workspacePublicId . '/radar', 'status' => $status, 'clusters' => $this->repository->clusters($ctx, $status, WorkspaceRequest::text($request->query['ranking'] ?? 'trend')), 'runs' => $this->repository->runs($ctx), 'ranking' => WorkspaceRequest::text($request->query['ranking'] ?? 'trend'), 'semantic_settings' => $this->semantic->settings($ctx->workspaceId, null)['settings']->snapshot(), 'semantic_url' => $this->base($request) . '/semantic-settings', 'semantic_permission' => 'discovery.manage']);
+        return $this->view->response('workspace/radar/index.twig', ['workspace' => $ctx, 'base' => '/w/' . $ctx->workspacePublicId . '/radar', 'automation_settings' => $this->automation->settings($ctx->workspaceId, null), 'automation_run' => $this->automation->latest($ctx->workspaceId, null), 'automation_url' => $this->base($request) . '/automation', 'automation_permission' => 'discovery.manage', 'status' => $status, 'clusters' => $this->repository->clusters($ctx, $status, WorkspaceRequest::text($request->query['ranking'] ?? 'trend')), 'runs' => $this->repository->runs($ctx), 'ranking' => WorkspaceRequest::text($request->query['ranking'] ?? 'trend'), 'semantic_settings' => $this->semantic->settings($ctx->workspaceId, null)['settings']->snapshot(), 'semantic_url' => $this->base($request) . '/semantic-settings', 'semantic_permission' => 'discovery.manage']);
     }
     public function semantic(Request $request): Response
     {

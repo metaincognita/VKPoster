@@ -27,6 +27,7 @@ final class SourceController
         private readonly SourceItemRepository $items,
         private readonly \App\Domain\Source\Selection\SelectionService $selection,
         private readonly \App\Domain\Source\Selection\SemanticSelection $semantic,
+        private readonly \App\Domain\Content\Automation\AutomationPolicies $automation,
     ) {
     }
 
@@ -58,6 +59,10 @@ final class SourceController
             'semantic_settings' => $this->semantic->settings(WorkspaceRequest::context($request)->workspaceId, $this->source($request)->id)['settings']->snapshot(),
             'semantic_url' => $this->base($request) . '/' . $this->source($request)->publicId . '/semantic-settings',
             'semantic_permission' => 'sources.manage',
+            'automation_settings' => $this->automation->settings(WorkspaceRequest::context($request)->workspaceId, $this->source($request)->id),
+            'automation_run' => $this->automation->latest(WorkspaceRequest::context($request)->workspaceId, $this->source($request)->id),
+            'automation_url' => $this->base($request) . '/' . $this->source($request)->publicId . '/automation',
+            'automation_permission' => 'sources.manage',
             'rules_configured' => $this->selection->rules(WorkspaceRequest::context($request), $this->source($request)) !== null,
         ]);
     }

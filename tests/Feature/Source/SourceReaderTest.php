@@ -166,6 +166,8 @@ final class SourceReaderTest extends WorkspaceTestCase
         $discovery = require TestEnv::basePath() . '/database/migrations/2026_10_06_000026_create_content_discovery.php';
         $origins = require TestEnv::basePath() . '/database/migrations/2026_10_06_000028_create_content_post_origins.php';
         $providers = require TestEnv::basePath() . '/database/migrations/2026_10_06_000029_add_content_provider_metadata.php';
+        $automation = require TestEnv::basePath() . '/database/migrations/2026_10_06_000030_create_content_automation.php';
+        $automation->down($this->db);
         $providers->down($this->db);
         $origins->down($this->db);
         $discovery->down($this->db);
@@ -187,6 +189,7 @@ final class SourceReaderTest extends WorkspaceTestCase
             $discovery->up($this->db);
             $origins->up($this->db);
             $providers->up($this->db);
+            $automation->up($this->db);
             (new Migrator($this->db, TestEnv::basePath() . '/database/migrations'))->migrate();
         }
     }

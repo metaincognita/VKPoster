@@ -124,7 +124,7 @@ final class RealProviderWorkflowTest extends SourceSelectionTestCase
         [$ctx, $source, $item, $revision] = $this->fixture();
         $http = (new MockHttpClient())->expect('POST', 'https://api.openai.com/v1/responses', 200, (string) file_get_contents(TestEnv::basePath() . '/tests/Fixtures/ContentProviders/openai-semantic.json'));
         $c = $this->app->container();
-        $semantic = new SemanticSelection($this->db, $c->get(Clock::class), new OpenAiSemanticSelectionProvider(new OpenAiResponses(new ProviderHttp($http), 'test-key')), new SemanticPolicy());
+        $semantic = new SemanticSelection($this->db, $c->get(Clock::class), new OpenAiSemanticSelectionProvider(new OpenAiResponses(new ProviderHttp($http), 'test-key')), new SemanticPolicy(), $c->get(\App\Domain\Content\Automation\AutomationPolicies::class));
         $semantic->saveLocked($ctx, $source->id, SemanticSettings::fromInput(['enabled' => true, 'criteria' => 'AI news']));
         $messages = $c->get(MaterialRepository::class)->messages($ctx, $source, (int) $item['id']);
         $row = $semantic->materialLocked($ctx->workspaceId, $source->id, $item, $messages, new SelectionResult('approved', 'Pass', 'none'));

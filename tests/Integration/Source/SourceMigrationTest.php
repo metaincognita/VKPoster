@@ -31,6 +31,8 @@ final class SourceMigrationTest extends TestCase
         $discovery = require TestEnv::basePath() . '/database/migrations/2026_10_06_000026_create_content_discovery.php';
         $origins = require TestEnv::basePath() . '/database/migrations/2026_10_06_000028_create_content_post_origins.php';
         $providers = require TestEnv::basePath() . '/database/migrations/2026_10_06_000029_add_content_provider_metadata.php';
+        $automation = require TestEnv::basePath() . '/database/migrations/2026_10_06_000030_create_content_automation.php';
+        $automation->down($db);
         $providers->down($db);
         $origins->down($db);
         $discovery->down($db);
@@ -64,6 +66,7 @@ final class SourceMigrationTest extends TestCase
             $discovery->up($db);
             $origins->up($db);
             $providers->up($db);
+            $automation->up($db);
             $db->execute('DROP TABLE IF EXISTS migrations_sources_test');
             unlink($directory . '/2026_10_05_000013_create_sources.php');
             rmdir($directory);

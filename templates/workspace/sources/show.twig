@@ -13,12 +13,14 @@
     <div><dt class="text-sm text-muted">{{ t('Тип источника') }}</dt><dd>{{ source.type.label() }}</dd></div>
     <div><dt class="text-sm text-muted">{{ t('Канал Telegram') }}</dt><dd><a class="link break-all" href="{{ source.telegramUrl() }}" target="_blank" rel="noopener noreferrer">@{{ source.telegramUsername }}</a></dd></div>
     <div><dt class="text-sm text-muted">{{ t('Статус подключения') }}</dt><dd>{{ d.badge(t(source.status.label())) }}</dd></div>
-    <div><dt class="text-sm text-muted">{{ t('Источник включён') }}</dt><dd>{{ source.enabled ? t('Да') : t('Нет') }} <span class="text-sm text-muted">· {{ t('Материалы сохраняются без обработки и публикации') }}</span></dd></div>
+    <div><dt class="text-sm text-muted">{{ t('Источник включён') }}</dt><dd>{{ source.enabled ? t('Да') : t('Нет') }} <span class="text-sm text-muted">· {{ t('Импорт включается отдельно от автоматизации. Публикация не запускается') }}</span></dd></div>
 </dl>
 {% endset %}
 {{ d.card(t('Настройки источника'), body = details) }}
 {% set rules %}{% include 'workspace/sources/selection-rules.twig' %}{% endset %}
 <div class="mt-5">{{ d.card(t('Правила отбора'), body = rules) }}</div>
+{% set automation_body %}{% include 'workspace/sources/automation.twig' %}{% endset %}
+<div class="mt-5">{{ d.card(t('Автоматизация'), body = automation_body) }}</div>
 {% set semantic_body %}{% include 'workspace/sources/semantic-settings.twig' %}{% endset %}
 <div class="mt-5">{{ d.card(t('Смысловой отбор'), body = semantic_body) }}</div>
 {% set received %}

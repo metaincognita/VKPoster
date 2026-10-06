@@ -1,0 +1,25 @@
+[
+  {
+    "name": "source-automation",
+    "url": "/w/{ws}/sources",
+    "login_as": "automation-ui@example.com",
+    "actions": [
+      {
+        "click": "button[data-cookie-choice='necessary']"
+      },
+      {
+        "click": "main a:has-text('Automation UI')"
+      }
+    ]
+  },
+  {
+    "name": "radar-automation",
+    "url": "/w/{ws}/radar?status=imported",
+    "login_as": "automation-ui@example.com",
+    "actions": [
+      {
+        "click": "button[data-cookie-choice='necessary']"
+      }
+    ]
+  }
+]

@@ -33,7 +33,7 @@
 
 ## Этап 3 из 3 — полная автоматизация
 
-**Подэтапы 3.1 и 3.2 completed / завершены. Live smoke OpenAI/TinEye/Replicate перенесён в 3.5. Следующий подэтап — 3.3 Automation; он пока не начат.**
+**Подэтапы 3.1–3.3 completed / завершены в согласованном Core-объёме. Live smoke OpenAI/TinEye/Replicate перенесён в 3.5. Следующий подэтап — 3.4 Production Hardening; он не начат. Автоматизация создаёт только черновики, автопубликации нет.**
 
 - Полная end-to-end автоматизация от Source и отбора до обработанного материала и публикации.
 - Интеграция с существующими PostDraft / scheduler / publishing без переписывания текущего pipeline.
@@ -144,4 +144,26 @@ Adapters implemented through existing interfaces: OpenAI Responses (Text + Seman
 
 Проверки 3.2: полный PHP suite — **1985 tests / 38363 assertions**, успешно; **39 mocked provider contract/unit tests / 108 assertions**, шесть новых workflow/feature tests и 12 config activation tests; PCOV новых adapter classes 85–100%. Reader: 52 автономных tests и 2 отдельных PHP HTTP contracts (включая фото/ACK/restart), успешно. PHPStan level 8 + strict rules, Ruff 0.14.1, code style, composer audit (0 advisories), миграция 29 и rollback/replay на app_test, /healthz (DB/Redis ok) — успешно. Video UI/axe: 375/768/1440 × light/dark плюс 360px axe, без blocking issues; скриншоты просмотрены. Первый временный UI server дал navigation timeout, повторный прогон успешен. Private env-value scan PASS; placeholders в .env.example не являются credentials. 3.2 завершён и фиксируется отдельным checkpoint в feature-ветке; stash@{0} сохранён. Main, publishing, billing и telegram-reader не изменены. Live платные вызовы не выполнялись; credentials намеренно не подключены. Проверки реальных OpenAI/TinEye/Replicate перенесены в 3.5. Следующий подэтап — 3.3 Automation, в этой фиксации не начинается.
 
-Owner acceptance: Stage 3.2 is complete on automated/mocked verification. Real adapters require both explicit provider selection and corresponding non-empty env credentials; selecting a real provider without credentials fails configuration safely. Merely adding credentials does not switch Fake providers on its own. Fake remains the dev/test default. No keys requested or connected. Live smoke is a tracked Stage 3.5 task, not a blocker for this checkpoint.
+Owner acceptance: Stage 3.2 is complete on automated/mocked verification. Real adapters require both explicit provider selection and corresponding non-empty env credentials; Stage 3.3 keeps application startup available when credentials are missing, but denies the provider operation before HTTP and routes automation to manual review or failed according to policy. Merely adding credentials does not switch Fake providers on its own. Fake remains the dev/test default. No keys requested or connected. Live smoke is a tracked Stage 3.5 task, not a blocker for this checkpoint.
+
+
+## Подэтап 3.3 — Automation
+
+**3.3 completed / завершён.** [Архитектура и эксплуатация](../architecture/modules/content-automation.md). Миграция 30: `content_automation_settings`, `content_automation_runs`, `content_automation_calls`. Отдельных publishing/Queue frameworks нет: минутный `content-automation` в существующем Schedule ставит `AutomationJob` в существующую default Queue. Reader сохраняет свой цикл 10 секунд, persistent state/outbox/internal API и дедупликацию; код reader и session не менялись.
+
+- Source/Radar policies: enabled, auto selection, optional semantic selection, text/image/video processing, auto draft, manual review fallback. Автоматические и дорогие действия по умолчанию выключены; video требует отдельного явного разрешения. Для Radar — enabled Discovery, частота, provider types и лимит кандидатов; Fake запрещён в production.
+- Только актуальный approved материал проходит шаги. Ручное решение имеет приоритет; rejected/needs_review останавливаются. Semantic HTTP для настроенной automation policy откладывается до worker. Без auto-draft итог остаётся техническим needs_review для ручного создания Draft; selection approved не меняется. Auto-draft использует обычный ContentDraftService/PostDraft, без публикации.
+- Durable revision/policy keys, advisory lock на материал, checkpoints и ссылки на processing jobs/results предотвращают дубли. Новая revision обрабатывается заново; stale блокируется. Retry/backoff существующей Queue, восстановление потерянной постановки, pause/resume Source и ожидание reader/video переживают restart. Video polling сохраняет прежний remote job ID. Неопределённый semantic/text/image provider результат не повторяется автоматически как новый платный вызов и требует проверки.
+- Cost guards проверяют настройки, provider/credentials и выполненные шаги. Отсутствующий ключ не ломает запуск приложения: операция блокируется до HTTP, без подмены Fake. Для image search/enhancement сохранён durable pre-call fence. UI «Автоматизация» добавлен на Source и в Радар: настройки, последнее выполнение, успешный шаг и безопасная ошибка; workspace permissions, CSRF и audit покрыты тестами.
+
+Финальные проверки 3.3:
+
+- Полный PHP suite: **2019 tests / 38564 assertions**, успешно. Целевой набор automation/config: **46 tests / 199 assertions**. Unit/integration/E2E проверяют once/dedup, selection/manual priority, disabled steps, draft, stale/new revisions, worker retry/restart, missing credentials, video opt-in, Discovery frequency/types/limit и image ACK/recovery.
+- PCOV новых automation classes: **81.8–100%** строк (coordinator около 86%); PHPStan level 8 + strict rules — **795 файлов, без ошибок**.
+- Reader: **52 автономных tests**, успешно; **2 отдельных HTTP contract tests**, успешно (в общем discovery пропускаются). Контракт: 2 items / 4 messages, 4 image jobs / 8 variants, ACK/restart и повторная доставка без дублей. Ruff 0.14.1 и code style — успешно.
+- Миграция 30 применена локально, rollback/replay проверен; зависимые migration tests обновлены. `/healthz`: HTTP 200, DB/Redis ok. CSS, composer audit (0 advisories), phpDocumentor — успешно.
+- Source/Radar UI/axe на изолированном app_test PHP-FPM/nginx стенде: **12 screenshots** (375/768/1440 × light/dark), дополнительный axe на 360px, без блокирующих нарушений и horizontal overflow. Скриншоты просмотрены. Временный встроенный PHP server давал navigation timeout; проверка на PHP-FPM/nginx прошла. Основной consent и live-материалы не менялись.
+
+Границы готовности: внешние платные/live вызовы не выполнялись; credentials не запрашивались. Live smoke providers и отдельный Telegram photo transfer остаются в 3.5. Discovery providers всё ещё Fake; production Discovery не включается с ними. Бюджеты/quotas, retention и orphan cleanup, сокращение длительных semantic transactions, reconciliation неопределённых внешних результатов и безопасный deployment rollback относятся к 3.4. Exactly-once внешнего платного вызова при потере ответа не заявляется; автоматический replay такого вызова заблокирован. Production-готовность всей цепочки и автопубликация не заявляются.
+
+Подэтап завершён без commit/push. Main и резервный stash@{0} сохранены; .env/session/runtime/credentials не добавлены в изменения. Этап 3.4 не начат.

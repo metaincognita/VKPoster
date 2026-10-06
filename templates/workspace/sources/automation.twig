@@ -1,0 +1,22 @@
+{% import 'components/forms.twig' as f %}
+{% set labels = {enabled: 'Включить автоматизацию', auto_selection: 'Автоматический отбор', semantic_selection: 'Смысловой отбор (по сохранённым критериям)', auto_text_processing: 'Обрабатывать текст', auto_image_processing: 'Обрабатывать изображения', auto_video_generation: 'Генерировать видео (возможны расходы)', auto_draft: 'Создавать черновик без публикации', manual_review_fallback: 'При проблеме отправлять на ручную проверку'} %}
+{% if can(automation_permission) %}
+<form method="post" action="{{ automation_url }}" class="grid gap-4" data-source-form data-content-automation>
+{{ csrf_field() }}
+{% for key, label in labels %}{{ f.checkbox(key, t(label), checked = old('automation_' ~ key, automation_settings[key] ? '1' : '0') == '1', value = '1', id = 'automation-' ~ key) }}{% endfor %}
+{{ f.select('text_mode', t('Режим текста'), {unchanged: t('Без изменений'), edit: t('Лёгкая редактура'), rewrite: t('Переписать'), shorten: t('Сократить')}, value = old('automation_text_mode', automation_settings.text_mode), error = errors('automation_text_mode')|first) }}
+{% if automation_permission == 'discovery.manage' %}
+{{ f.checkbox('discovery_enabled', t('Регулярно обнаруживать новые материалы'), checked = automation_settings.discovery_enabled, value = '1') }}
+{{ f.input('interval_minutes', t('Интервал, минуты (1–1440)'), type = 'number', value = old('automation_interval_minutes', automation_settings.interval_minutes), error = errors('automation_interval_minutes')|first, attrs = {min: 1, max: 1440}) }}
+{{ f.input('candidate_limit', t('Новых кандидатов за запуск (1–100)'), type = 'number', value = old('automation_candidate_limit', automation_settings.candidate_limit), error = errors('automation_candidate_limit')|first, attrs = {min: 1, max: 100}) }}
+{% for kind, label in {telegram: 'Telegram', web: 'Web / News', social: 'Social'} %}{{ f.checkbox('provider_types[]', t(label), checked = kind in automation_settings.provider_types, value = kind, id = 'automation-provider-' ~ kind) }}{% endfor %}
+{% endif %}
+<p class="text-sm text-muted">{{ t('Результаты сохраняются отдельно. Без автоматического черновика материал остаётся для ручного решения. Fake Discovery отключён в production.') }}</p>
+<div>{{ f.button(t('Сохранить автоматизацию'), type = 'submit') }}</div>
+</form>
+{% endif %}
+{% set step_labels = {selection: 'Отбор', text: 'Текст', images: 'Изображения', video: 'Видео', draft: 'Черновик', discovery: 'Обнаружение'} %}
+{% set run_labels = {pending: 'Ожидает запуска', waiting: 'Ожидает reader или provider', completed: 'Завершено', failed: 'Ошибка', needs_review: 'Требует проверки', rejected: 'Отклонён', stale: 'Устарел', paused: 'Приостановлен'} %}
+{% if automation_run %}
+<div class="mt-4"><p>{{ t('Последний запуск') }}: {{ automation_run.created_at|date('d.m.Y H:i', workspace.timezone) }} · {{ workspace.timezone }}</p><p>{{ t('Статус') }}: {{ t(run_labels[automation_run.status] ?? 'Ожидает запуска') }}</p><p>{{ t('Последний успешный шаг') }}: {{ t(step_labels[automation_run.last_successful_step ?? ''] ?? '—') }}</p>{% if automation_run.error %}<p class="mt-2 break-words {{ automation_run.status == 'failed' ? 'text-bad-fg' : 'text-muted' }}">{{ automation_run.error }}</p>{% endif %}</div>
+{% else %}<p class="mt-4 text-muted">{{ t('Автоматизация ещё не запускалась') }}</p>{% endif %}

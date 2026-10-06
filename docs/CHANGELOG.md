@@ -66,3 +66,7 @@ Independent Fake Telegram/WebNews/Social metadata discovery, canonical dedupe, h
 Opt-in OpenAI Responses text/semantic, TinEye reverse search, Replicate Real-ESRGAN and async Seedance adapters; immutable metadata histories and remote video IDs/poll leases; bounded safe HTTP/downloads; synthetic mocked contracts; Fake retained. Stage 3.2 completed on mocked contracts; eligible credentials and live smoke deferred to Stage 3.5.
 
 Stage 3.2 is accepted on mocked HTTP/contracts. Real integrations need explicit selection plus corresponding env credentials; absent credentials prevent activation. OpenAI/TinEye/Replicate live smoke is deferred to Stage 3.5; Fake remains the dev/test default.
+
+## Sources Stage 3.3 — Automation
+
+Optional Source/Radar automation policies, bounded periodic Discovery, existing Queue coordinator with revision checkpoints/recovery/cost guards, manual fallback and ordinary ContentDraftService export. No auto-publishing, external live calls or new provider integration. Migration 30; policy UI and regression tests.

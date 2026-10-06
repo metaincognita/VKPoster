@@ -249,6 +249,7 @@ return static function (Router $router): void {
                 $r->get('', [\App\Http\Controllers\Discovery\RadarController::class, 'index']);
                 $r->get('/materials/{itemId:' . $ulid . '}', [\App\Http\Controllers\Discovery\RadarController::class, 'material']);
                 $r->group('', [[Authorize::class, ['permission' => 'discovery.manage']]], static function (Router $m) use ($ulid): void {
+                    $m->post('/automation', [\App\Http\Controllers\Sources\AutomationController::class, 'save']);
                     $m->post('/semantic-settings', [\App\Http\Controllers\Discovery\RadarController::class, 'semantic'])->middleware([RateLimit::class, ['bucket' => 'semantic-settings', 'max' => 10, 'seconds' => 60]]);
                     $m->post('/refresh', [\App\Http\Controllers\Discovery\RadarController::class, 'refresh'])->middleware([RateLimit::class, ['bucket' => 'discovery-refresh', 'max' => 5, 'seconds' => 60]]);
                     $m->post('/items/{discoveryId:' . $ulid . '}/import', [\App\Http\Controllers\Discovery\RadarController::class, 'import']);
@@ -264,6 +265,7 @@ return static function (Router $router): void {
                 $s->group('', [[Authorize::class, ['permission' => 'sources.manage']]], static function (Router $m) use ($ulid): void {
                     $m->get('/new', [SourceController::class, 'new']);
                     $m->post('', [SourceController::class, 'create']);
+                    $m->post('/{sourceId:' . $ulid . '}/automation', [\App\Http\Controllers\Sources\AutomationController::class, 'save']);
                     $m->get('/{sourceId:' . $ulid . '}/edit', [SourceController::class, 'edit']);
                     $m->post('/{sourceId:' . $ulid . '}', [SourceController::class, 'update']);
                     $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/draft', [\App\Http\Controllers\Sources\ContentDraftController::class, 'create'])->middleware([Authorize::class, ['permission' => 'posts.draft']])->middleware([RateLimit::class, ['bucket' => 'content-draft', 'max' => 10, 'seconds' => 60]]);

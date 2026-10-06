@@ -9,6 +9,8 @@
 {% block content %}
 {{ d.page_header(t('Радар'), t('Обнаруженные темы отдельно от ваших Sources. Проверьте материал перед обработкой.')) }}
 <div class="mt-5">{{ d.alert('info', t('Демонстрационные данные'), t('Telegram, Web/News и Social providers сейчас Fake. Радар использует синтетические fixtures, не обращается к внешним сервисам и не хранит полные тексты статей.')) }}</div>
+{% set automation_body %}{% include 'workspace/sources/automation.twig' %}{% endset %}
+<div class="mt-5">{{ d.card(t('Автоматизация'), body = automation_body) }}</div>
 {% set semantic_body %}{% include 'workspace/sources/semantic-settings.twig' %}{% endset %}
 <div class="mt-5">{{ d.card(t('Смысловая релевантность'), body = semantic_body) }}</div>
 <div class="my-5 grid gap-4 sm:grid-cols-2">

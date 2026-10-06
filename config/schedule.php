@@ -18,6 +18,7 @@ use App\Kernel\Queue\Schedule;
  * Later stages register their tasks here, e.g. `$schedule->call('publish-due', '* * * * *', ...)`.
  */
 return static function (Schedule $schedule): void {
+    $schedule->call('content-automation', '* * * * *', [\App\Domain\Content\Automation\Automation::class, 'tick']);
     $schedule->call('auth-prune', '17 3 * * *', [AuthMaintenance::class, 'prune']);
     // Hourly, so the checks of many channels are spread out; a channel is rechecked once its last check is older than 6 hours.
     $schedule->call('notifications-prune', '29 3 * * *', [Notifier::class, 'prune']);

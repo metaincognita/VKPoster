@@ -280,6 +280,8 @@ final class SourceVideoProcessingTest extends SourceSelectionTestCase
         $migration = require TestEnv::basePath() . '/database/migrations/2026_10_06_000025_create_source_video_generations.php';
         $discovery = require TestEnv::basePath() . '/database/migrations/2026_10_06_000026_create_content_discovery.php';
         $providers = require TestEnv::basePath() . '/database/migrations/2026_10_06_000029_add_content_provider_metadata.php';
+        $automation = require TestEnv::basePath() . '/database/migrations/2026_10_06_000030_create_content_automation.php';
+        $automation->down($this->db);
         $providers->down($this->db);
         $discovery->down($this->db);
         $migration->down($this->db);
@@ -289,6 +291,7 @@ final class SourceVideoProcessingTest extends SourceSelectionTestCase
             $migration->up($this->db);
             $discovery->up($this->db);
             $providers->up($this->db);
+            $automation->up($this->db);
         }
         self::assertSame('pending', array_column($this->db->select('SHOW COLUMNS FROM source_video_generations'), 'Default', 'Field')['status']);
     }

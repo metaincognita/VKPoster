@@ -21,11 +21,15 @@ final class ContentDiscovery
     public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly DiscoveryProviders $providers, private readonly DiscoveryClustering $clustering, private readonly TrendScore $score, private readonly AuditLog $audit, private readonly \App\Domain\Source\Selection\SelectionService $selection)
     {
     }
-    /** Calls providers outside locks, commits each batch and records only safe run outcomes. Returns newly created items. */
-    public function refresh(WorkspaceContext $ctx): int
+    /** Calls providers outside locks, commits each batch and records only safe run outcomes. Returns newly created items.
+     * @param list<string>|null $types */
+    public function refresh(WorkspaceContext $ctx, ?array $types = null, int $limit = 200): int
     {
         $created = 0;
         foreach ($this->providers->providers as $provider) {
+            if (($types !== null && !in_array($provider->sourceType(), $types, true)) || $created >= $limit) {
+                continue;
+            }
             $name = $provider->name();
             if (preg_match('/^[a-z0-9_-]{1,32}$/D', $name) !== 1 || !in_array($provider->sourceType(), ['telegram', 'web', 'social'], true)) {
                 throw new HttpException(503, 'Провайдер обнаружения недоступен.');
@@ -37,10 +41,13 @@ final class ContentDiscovery
                 if (count($batch) > 200) {
                     throw new \RuntimeException('Discovery batch too large');
                 }
-                $count = $this->db->transaction(function () use ($ctx, $batch, $name, $provider): int {
+                $count = $this->db->transaction(function () use ($ctx, $batch, $name, $provider, $limit, $created): int {
                     $this->lock($ctx);
                     $count = 0;
                     foreach ($batch as $item) {
+                        if ($count >= $limit - $created) {
+                            break;
+                        }
                         if ($item->provider !== $name || $item->sourceType !== $provider->sourceType() || ($item->publishedAt !== null && $item->publishedAt > $this->clock->now()->modify('+5 minutes'))) {
                             throw new \RuntimeException('Invalid provider item');
                         }

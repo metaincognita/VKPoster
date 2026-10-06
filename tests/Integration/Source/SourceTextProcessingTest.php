@@ -171,6 +171,8 @@ final class SourceTextProcessingTest extends SourceSelectionTestCase
         $discovery = require TestEnv::basePath() . '/database/migrations/2026_10_06_000026_create_content_discovery.php';
         $origins = require TestEnv::basePath() . '/database/migrations/2026_10_06_000028_create_content_post_origins.php';
         $providers = require TestEnv::basePath() . '/database/migrations/2026_10_06_000029_add_content_provider_metadata.php';
+        $automation = require TestEnv::basePath() . '/database/migrations/2026_10_06_000030_create_content_automation.php';
+        $automation->down($this->db);
         $providers->down($this->db);
         $origins->down($this->db);
         $discovery->down($this->db);
@@ -179,6 +181,7 @@ final class SourceTextProcessingTest extends SourceSelectionTestCase
         $discovery->up($this->db);
         $origins->up($this->db);
         $providers->up($this->db);
+        $automation->up($this->db);
         self::assertSame(0, $this->db->table('source_text_processings')->count());
         self::assertContains('settings_version', array_column($this->db->select('SHOW COLUMNS FROM source_text_processings'), 'Field'));
     }

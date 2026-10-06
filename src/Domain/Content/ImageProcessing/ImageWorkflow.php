@@ -20,7 +20,7 @@ use Symfony\Component\Uid\Ulid;
 /** Photo processing is independent of text, source selection and the publication queue. */
 final class ImageWorkflow
 {
-    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly MaterialRepository $materials, private readonly ImageRepository $repository, private readonly ImageFiles $files, private readonly ImageAnalysis $analysis, private readonly ImageSearchProvider $search, private readonly ImageEnhancementProvider $enhancement, private readonly AuditLog $audit, private readonly SourceRepository $sources, private readonly \App\Domain\Workspace\WorkspaceRepository $workspaces)
+    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly MaterialRepository $materials, private readonly ImageRepository $repository, private readonly ImageFiles $files, private readonly ImageAnalysis $analysis, private readonly ImageSearchProvider $search, private readonly ImageEnhancementProvider $enhancement, private readonly AuditLog $audit, private readonly SourceRepository $sources, private readonly \App\Domain\Workspace\WorkspaceRepository $workspaces, private readonly \App\Domain\Content\Automation\AutomationCalls $calls)
     {
     }
 
@@ -109,6 +109,25 @@ final class ImageWorkflow
         if (!Ulid::isValid($id)) {
             throw new HttpException(422, 'Invalid job');
         }
+        $lock = 'content-photo:' . $id;
+        if ((int) $this->db->select('SELECT GET_LOCK(?, 0) AS acquired', [$lock])[0]['acquired'] !== 1) {
+            throw new HttpException(503, 'Image processing busy');
+        }
+        try {
+            return $this->acceptLocked($payload);
+        } finally {
+            $this->db->select('SELECT RELEASE_LOCK(?)', [$lock]);
+        }
+    }
+
+    /** @param array<string,mixed> $payload
+     * @return array{ack:bool,job_id:string,duplicate:bool,status:string} */
+    private function acceptLocked(array $payload): array
+    {
+        $id = is_string($payload['job_id'] ?? null) ? $payload['job_id'] : '';
+        if (!Ulid::isValid($id)) {
+            throw new HttpException(422, 'Invalid job');
+        }
         $row = $this->db->table('source_image_processings')->where('public_id', '=', $id)->first() ?? throw new HttpException(404, 'Not found');
         foreach (['peer_id', 'message_id', 'photo_id'] as $field) {
             if (!is_string($payload[$field] ?? null) && !is_int($payload[$field] ?? null)) {
@@ -153,6 +172,9 @@ final class ImageWorkflow
             $warnings = [];
             if ($original['quality'] !== 'good') {
                 try {
+                    if (!$this->calls->claimImage($ctx->workspaceId, $source->id, $id, 'image_search')) {
+                        throw new \RuntimeException('Provider call requires review');
+                    }
                     $candidates = array_slice($this->search->search($originalPath), 0, 5);
                 } catch (\Throwable) {
                     $candidates = [];
@@ -173,6 +195,9 @@ final class ImageWorkflow
                     }
                 }
                 try {
+                    if (!$this->calls->claimImage($ctx->workspaceId, $source->id, $id, 'image_enhancement')) {
+                        throw new \RuntimeException('Provider call requires review');
+                    }
                     $enhanced = $this->enhancement->enhance($originalPath);
                     if ($enhanced !== null) {
                         $path = $this->files->temporary($enhanced);
