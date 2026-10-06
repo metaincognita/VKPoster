@@ -62,3 +62,21 @@ docker compose up -d reader
 `status` показывает counts и до 10 failed event IDs, без payload. Исправьте причину 422 перед requeue. Другие pending events не удаляйте. Alert triggers: reader age >180 seconds при ожидаемом enabled Source; failed runs/jobs; очередь abandoned >0 длительное время; долго нет успешного шага при наличии approved материалов; открытый circuit/provider errors. Нулевые success при выключенной automation не означают аварию.
 
 Лимиты считаются в запросах/попытках, не в деньгах; price/token metadata реальных adapters сохраняется отдельно. Локальные mocked tests не подтверждают real provider availability/биллинг или production deployment. Exactly-once внешнего платного side effect без provider reconciliation не гарантируется; неопределённые результаты требуют ручной проверки. Final live E2E и deployment readiness остаются 3.5.
+
+
+## Independent review: durable image operation outcomes
+
+Migration 33 adds status, error_category, attempts, available_at and result_json
+to content_automation_calls. A pre-dispatch fence starts as uncertain. Confirmed
+retryable failures (429, known safe transient failures/connect timeout) allow at
+most five attempts with a 60-second minimum backoff. Successful variants are
+archived in result_json, reused if the next step fails and pinned against orphan
+cleanup. Existing legacy fences remain uncertain; they cannot silently replay.
+
+An ambiguous paid POST/transport outcome never automatically redispatches. Once
+Replicate has created a prediction, even a retryable polling error cannot restart
+the complete enhancement operation. It requires reconciliation. Polling uses a
+30-second elapsed deadline and checks every received response before applying the
+deadline, including a successful final poll. Terminal predictions are not cancelled.
+Migration 32 updates only the original material export key; copies retain their
+separate idempotency identities while their proven-current selection hash changes.

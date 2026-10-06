@@ -358,22 +358,29 @@ final class RealProvidersTest extends TestCase
     public function testEnhancementFailureCancelsRemoteWork(string $reply): void
     {
         $http = (new MockHttpClient())->expect('POST', 'https://api.replicate.com/v1/files', 201, $this->fixture('replicate-upload'))->expect('POST', 'https://api.replicate.com/v1/predictions', 201, $this->fixture('replicate-start'));
-        for ($i = 0; $i < 6; ++$i) {
+        $terminal = str_contains($reply, '"status":"failed"') || str_contains($reply, '"status":"succeeded"');
+        $timeout = str_contains($reply, '"id":"testprediction","status":"processing"');
+        for ($i = 0; $i < ($timeout ? 6 : 1); ++$i) {
             $http->expect('GET', 'https://api.replicate.com/v1/predictions/testprediction', 200, $reply);
         }
-        $http->expect('POST', 'https://api.replicate.com/v1/predictions/testprediction/cancel', 200, '{"status":"canceled"}');
+        if (!$terminal) {
+            $http->expect('POST', 'https://api.replicate.com/v1/predictions/testprediction/cancel', 200, '{"status":"canceled"}');
+        }
+        $clock = new \App\Tests\Support\FakeClock();
         $path = tempnam(sys_get_temp_dir(), 'enhance-test-');
         file_put_contents($path, MediaFixtures::jpeg());
         try {
-            $provider = new ReplicateImageEnhancementProvider(new ReplicateApi($this->transport($http), 'test-token'), $this->downloads($http), static function (int $delay): void {
-            });
+            $provider = new ReplicateImageEnhancementProvider(new ReplicateApi($this->transport($http), 'test-token'), $this->downloads($http), static function (int $delay) use ($clock): void {
+                $clock->advance(5);
+            }, $clock);
             try {
                 $provider->enhance($path);
                 self::fail();
             } catch (ProviderException $e) {
                 self::assertStringNotContainsString('secret', $e->getMessage());
             }
-            self::assertSame('https://api.replicate.com/v1/predictions/testprediction/cancel', ($http->requests[array_key_last($http->requests) ?? throw new \LogicException()] ?? throw new \LogicException())['url']);
+            $http->assertAllConsumed();
+            self::assertSame(!$terminal, in_array('https://api.replicate.com/v1/predictions/testprediction/cancel', array_column($http->requests, 'url'), true));
         } finally {
             unlink($path);
         }
@@ -472,6 +479,54 @@ final class RealProvidersTest extends TestCase
             } catch (ProviderException $e) {
                 self::assertSame($beforeDispatch, $e->retryable);
             }
+        }
+    }
+
+    public function testEnhancementSuccessAtDeadlineOnLastPollIsNotCancelled(): void
+    {
+        $http = (new MockHttpClient())->expect('POST', 'https://api.replicate.com/v1/files', 201, $this->fixture('replicate-upload'))->expect('POST', 'https://api.replicate.com/v1/predictions', 201, $this->fixture('replicate-start'));
+        for ($i = 0; $i < 5; ++$i) {
+            $http->expect('GET', 'https://api.replicate.com/v1/predictions/testprediction', 200, '{"id":"testprediction","status":"processing"}');
+        }
+        $http->expect('GET', 'https://api.replicate.com/v1/predictions/testprediction', 200, '{"id":"testprediction","status":"succeeded","output":"https://cdn.example.org/result.jpg"}');
+        $http->expect('GET', 'https://cdn.example.org/result.jpg', 200, MediaFixtures::jpeg(), ['Content-Type' => 'image/jpeg']);
+        $clock = new \App\Tests\Support\FakeClock();
+        $path = tempnam(sys_get_temp_dir(), 'last-poll-');
+        file_put_contents($path, MediaFixtures::jpeg());
+        try {
+            $provider = new ReplicateImageEnhancementProvider(new ReplicateApi($this->transport($http), 'test-token'), $this->downloads($http), static function (int $delay) use ($clock): void {
+                $clock->advance(5);
+            }, $clock);
+            self::assertSame(MediaFixtures::jpeg(), $provider->enhance($path));
+            $http->assertAllConsumed();
+            self::assertNotContains('https://api.replicate.com/v1/predictions/testprediction/cancel', array_column($http->requests, 'url'));
+        } finally {
+            unlink($path);
+        }
+    }
+
+    public function testPolling429AfterPredictionCreationIsUncertainRatherThanSafeRedispatch(): void
+    {
+        $http = (new MockHttpClient())->expect('POST', 'https://api.replicate.com/v1/files', 201, $this->fixture('replicate-upload'))->expect('POST', 'https://api.replicate.com/v1/predictions', 201, $this->fixture('replicate-start'));
+        $http->expect('GET', 'https://api.replicate.com/v1/predictions/testprediction', 429, '{}', ['Retry-After' => '60']);
+        $http->expect('POST', 'https://api.replicate.com/v1/predictions/testprediction/cancel', 200, '{"status":"canceled"}');
+        $clock = new \App\Tests\Support\FakeClock();
+        $path = tempnam(sys_get_temp_dir(), 'uncertain-poll-');
+        file_put_contents($path, MediaFixtures::jpeg());
+        try {
+            $provider = new ReplicateImageEnhancementProvider(new ReplicateApi($this->transport($http), 'test-token'), $this->downloads($http), static function (int $delay) use ($clock): void {
+                $clock->advance(1);
+            }, $clock);
+            try {
+                $provider->enhance($path);
+                self::fail('Cannot redispatch an existing paid prediction');
+            } catch (ProviderException $e) {
+                self::assertSame('enhancement_outcome_unknown', $e->category);
+                self::assertFalse($e->retryable);
+            }
+            $http->assertAllConsumed();
+        } finally {
+            unlink($path);
         }
     }
 

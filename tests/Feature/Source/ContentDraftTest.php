@@ -33,6 +33,7 @@ final class ContentDraftTest extends PostTestCase
     {
         // Legacy DDL rollback tests recreate their original tables; restore additive review columns.
         (require \App\Tests\Support\TestEnv::basePath() . '/database/migrations/2026_10_07_000032_review_fixes.php')->up(\App\Tests\Support\TestEnv::connection());
+        (require \App\Tests\Support\TestEnv::basePath() . '/database/migrations/2026_10_07_000033_independent_review.php')->up(\App\Tests\Support\TestEnv::connection());
         parent::tearDown();
     }
 
@@ -422,19 +423,40 @@ final class ContentDraftTest extends PostTestCase
         [$ctx, $source, $item, $revision, $text] = $this->fixture();
         $c = $this->app->container();
         $post = $c->get(ContentDraftService::class)->create($ctx, $source, (string) $item['public_id'], $revision, $text);
+        $copies = [$this->service()->duplicate($ctx, $post), $this->service()->duplicate($ctx, $post)];
+        $copyKeys = array_column($this->db->select('SELECT idempotency_key FROM content_post_origins WHERE post_id<>?', [$post->id]), 'idempotency_key');
         $decision = $c->get(MaterialRepository::class)->selection($ctx, $source, (int) $item['id']) ?? throw new \LogicException('Missing decision');
         unset($decision['revision_hash']);
         $oldHash = hash('sha256', json_encode($decision, JSON_THROW_ON_ERROR));
         $this->db->execute('UPDATE source_selection_decisions SET revision_hash=NULL WHERE workspace_id=? AND item_id=?', [$ctx->workspaceId, $item['id']]);
         $this->db->execute('UPDATE source_text_processings SET selection_hash=? WHERE workspace_id=? AND item_id=?', [$oldHash, $ctx->workspaceId, $item['id']]);
-        $this->db->execute('UPDATE content_post_origins SET selection_hash=?, idempotency_key=? WHERE workspace_id=? AND item_id=?', [$oldHash, hash('sha256', 'material:' . $item['id'] . ':' . $revision . ':' . $oldHash), $ctx->workspaceId, $item['id']]);
+        $this->db->execute('UPDATE content_post_origins SET selection_hash=?, idempotency_key=? WHERE post_id=?', [$oldHash, hash('sha256', 'material:' . $item['id'] . ':' . $revision . ':' . $oldHash), $post->id]);
+        $this->db->execute('UPDATE content_post_origins SET selection_hash=? WHERE post_id<>?', [$oldHash, $post->id]);
         $migration = require TestEnv::basePath() . '/database/migrations/2026_10_07_000032_review_fixes.php';
         $migration->up($this->db);
         $migration->up($this->db);
         self::assertNull($c->get(\App\Domain\Content\Publishing\ContentOriginGuard::class)->problem($post));
         self::assertSame($post->id, $c->get(ContentDraftService::class)->create($ctx, $source, (string) $item['public_id'], $revision, $text)->id);
         self::assertSame(1, $this->db->table('source_text_processings')->count());
+        self::assertSame(3, $this->db->table('content_post_origins')->count());
+        self::assertSame($copyKeys, array_column($this->db->select('SELECT idempotency_key FROM content_post_origins WHERE post_id<>?', [$post->id]), 'idempotency_key'));
+        foreach ($copies as $copy) {
+            self::assertNull($c->get(\App\Domain\Content\Publishing\ContentOriginGuard::class)->problem($copy));
+        }
+    }
+
+    public function testTelegramDeletionInvalidatesExistingDraftWithoutRemovingHistory(): void
+    {
+        [$ctx, $source, $item, $revision, $text] = $this->fixture();
+        $c = $this->app->container();
+        $post = $c->get(ContentDraftService::class)->create($ctx, $source, $item['public_id'], $revision, $text);
+        $c->get(\App\Domain\Source\SourceIngress::class)->accept(['version' => 1, 'source_id' => $source->publicId, 'connection_version' => 1, 'event_id' => hash('sha256', 'draft-deleted'), 'kind' => 'delete', 'payload' => ['peer_id' => '12345', 'message_ids' => [10], 'deleted_at' => '2026-10-06T10:00:00Z']]);
+        self::assertNotNull($c->get(\App\Domain\Content\Publishing\ContentOriginGuard::class)->problem($post));
         self::assertSame(1, $this->db->table('content_post_origins')->count());
+        self::assertSame(1, $this->db->table('posts')->count());
+        self::assertSame(1, $this->db->table('source_messages')->count());
+        $this->expectException(\App\Kernel\Exception\HttpException::class);
+        $c->get(SelectionService::class)->decide($ctx, $source, $item['public_id'], true);
     }
 
 }

@@ -37,6 +37,20 @@ final class SourceEventContract
             }
             return;
         }
+        if (($event['kind'] ?? null) === 'delete') {
+            $this->id($payload['peer_id'] ?? null);
+            $this->date($payload['deleted_at'] ?? null);
+            $ids = $payload['message_ids'] ?? null;
+            if (!is_array($ids) || !array_is_list($ids) || $ids === [] || count($ids) > 100 || count(array_unique($ids, SORT_REGULAR)) !== count($ids)) {
+                throw new HttpException(422, 'Invalid deletion');
+            }
+            foreach ($ids as $id) {
+                if (!is_int($id) || $id < 1 || $id > 2147483647) {
+                    throw new HttpException(422, 'Invalid deleted message');
+                }
+            }
+            return;
+        }
         if (($event['kind'] ?? null) !== 'item') {
             throw new HttpException(422, 'Invalid kind');
         }

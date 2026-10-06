@@ -191,7 +191,22 @@ final class SourceReaderTest extends WorkspaceTestCase
             $providers->up($this->db);
             $automation->up($this->db);
             (require TestEnv::basePath() . '/database/migrations/2026_10_07_000032_review_fixes.php')->up($this->db);
+            (require TestEnv::basePath() . '/database/migrations/2026_10_07_000033_independent_review.php')->up($this->db);
             (new Migrator($this->db, TestEnv::basePath() . '/database/migrations'))->migrate();
         }
     }
+    public function testAuthenticatedDeleteAckKeepsHistoryAndCannotBeReorderedIntoResurrection(): void
+    {
+        [$owner, $workspace] = $this->ownerWithWorkspace();
+        $source = $this->app->container()->get(SourceService::class)->create($this->contextFor($workspace, $owner), 'Deleted', 'telegram', '@sample_channel', true);
+        $delete = ['version' => 1, 'source_id' => $source->publicId, 'event_id' => hash('sha256', 'http-delete'), 'kind' => 'delete', 'payload' => ['peer_id' => '12345', 'message_ids' => [10], 'deleted_at' => '2026-10-06T10:00:00Z']];
+        self::assertSame(403, $this->api($delete, 'wrong')->status);
+        self::assertSame(200, $this->api($delete)->status);
+        self::assertTrue(json_decode($this->api($delete)->body, true)['duplicate']);
+        self::assertSame(200, $this->api($this->event($source, [$this->message(10)]))->status);
+        self::assertSame('deleted', $this->db->table('source_items')->first()['status'] ?? null);
+        self::assertSame('Original', $this->db->table('source_messages')->first()['text'] ?? null);
+        self::assertSame(2, $this->db->table('source_events')->count());
+    }
+
 }

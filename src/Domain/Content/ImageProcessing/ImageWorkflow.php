@@ -39,6 +39,9 @@ final class ImageWorkflow
             $messages = $this->db->select('SELECT * FROM source_messages WHERE workspace_id = ? AND source_id = ? AND item_id = ? ORDER BY message_id', [$context->workspaceId, $source->id, $item['id']]);
             $count = 0;
             foreach ($messages as $message) {
+                if (isset(json_decode((string) $message['metadata_json'], true, 32, JSON_THROW_ON_ERROR)['deleted_at'])) {
+                    continue;
+                }
                 $media = $message['media_json'] === null ? null : json_decode((string) $message['media_json'], true, 32, JSON_THROW_ON_ERROR);
                 if (!is_array($media) || ($media['kind'] ?? '') !== 'photo' || !is_string($media['telegram_id'] ?? null) || preg_match('/^\d{1,32}$/D', $media['telegram_id']) !== 1) {
                     continue;
@@ -176,6 +179,7 @@ final class ImageWorkflow
         $paths = [];
         $variants = [];
         $committed = false;
+        $durableKeys = [];
         try {
             $originalPath = $this->files->temporary($bytes);
             $paths[] = $originalPath;
@@ -190,42 +194,51 @@ final class ImageWorkflow
             $variants[] = $this->variant($ctx->workspaceId, $originalPath, $original, 'original', null, 'telegram', ['status' => 'original']);
             $warnings = [];
             if ($original['quality'] !== 'good') {
-                try {
-                    if (!$this->calls->claimImage($ctx->workspaceId, $source->id, $id, 'image_search')) {
-                        throw new \RuntimeException('Provider call requires review');
-                    }
-                    $candidates = array_slice($this->search->search($originalPath), 0, 5);
-                } catch (\Throwable) {
-                    $candidates = [];
-                    $warnings[] = 'Поиск копий недоступен.';
-                }
-                foreach ($candidates as $candidate) {
+                foreach (['image_search', 'image_enhancement'] as $operation) {
+                    $saved = $this->calls->imageResult($ctx->workspaceId, $id, $operation);
                     try {
-                        $path = $this->files->temporary($candidate->bytes);
-                        $paths[] = $path;
-                        $data = $this->analysis->inspect($path);
-                        if ($data['width'] * $data['height'] <= $original['width'] * $original['height']) {
-                            continue;
+                        if ($saved === null) {
+                            if (!$this->calls->claimImage($ctx->workspaceId, $source->id, $id, $operation)) {
+                                throw new \App\Integrations\ContentProviders\ProviderException('outcome_unavailable');
+                            }
+                            $saved = [];
+                            if ($operation === 'image_search') {
+                                foreach (array_slice($this->search->search($originalPath), 0, 5) as $candidate) {
+                                    $path = $this->files->temporary($candidate->bytes);
+                                    $paths[] = $path;
+                                    try {
+                                        $data = $this->analysis->inspect($path);
+                                        if ($data['width'] * $data['height'] > $original['width'] * $original['height']) {
+                                            $saved[] = $this->variant($ctx->workspaceId, $path, $data, 'candidate', $candidate->sourceUrl, $this->search->name(), $this->analysis->match($original, $data), $candidate->metadata);
+                                        }
+                                    } catch (\InvalidArgumentException|\App\Domain\Media\MediaException) {
+                                        $warnings[] = 'Одна из найденных копий не прошла техническую проверку.';
+                                    }
+                                }
+                            } else {
+                                $enhanced = $this->enhancement->enhance($originalPath);
+                                if ($enhanced !== null) {
+                                    $path = $this->files->temporary($enhanced);
+                                    $paths[] = $path;
+                                    $data = $this->analysis->inspect($path);
+                                    $saved[] = $this->variant($ctx->workspaceId, $path, $data, 'enhanced', null, $this->enhancement->name(), $this->analysis->match($original, $data), $this->enhancement instanceof \App\Integrations\ContentProviders\ProviderMetadata ? $this->enhancement->metadata() : []);
+                                }
+                            }
+                            $this->calls->imageSuccess($ctx->workspaceId, $id, $operation, $saved);
                         }
-                        $match = $this->analysis->match($original, $data);
-                        $variants[] = $this->variant($ctx->workspaceId, $path, $data, 'candidate', $candidate->sourceUrl, $this->search->name(), $match, $candidate->metadata);
+                        foreach ($saved as $variant) {
+                            $durableKeys[] = $variant['storage_key'];
+                            $variants[] = $variant;
+                        }
+                    } catch (\App\Integrations\ContentProviders\ProviderException $e) {
+                        $this->calls->imageFailure($ctx->workspaceId, $id, $operation, $e);
+                        if ($e->retryable) {
+                            throw new HttpException(503, 'Image provider temporarily unavailable');
+                        }
+                        $warnings[] = $operation === 'image_search' ? 'Поиск копий недоступен.' : 'Enhancement недоступен.';
                     } catch (\Throwable) {
-                        $warnings[] = 'Одна из найденных копий не прошла техническую проверку.';
+                        $warnings[] = $operation === 'image_search' ? 'Поиск копий недоступен.' : 'Enhancement недоступен.';
                     }
-                }
-                try {
-                    if (!$this->calls->claimImage($ctx->workspaceId, $source->id, $id, 'image_enhancement')) {
-                        throw new \RuntimeException('Provider call requires review');
-                    }
-                    $enhanced = $this->enhancement->enhance($originalPath);
-                    if ($enhanced !== null) {
-                        $path = $this->files->temporary($enhanced);
-                        $paths[] = $path;
-                        $data = $this->analysis->inspect($path);
-                        $variants[] = $this->variant($ctx->workspaceId, $path, $data, 'enhanced', null, $this->enhancement->name(), $this->analysis->match($original, $data), $this->enhancement instanceof \App\Integrations\ContentProviders\ProviderMetadata ? $this->enhancement->metadata() : []);
-                    }
-                } catch (\Throwable) {
-                    $warnings[] = 'Enhancement недоступен.';
                 }
             }
             $response = $this->db->transaction(function () use ($row, $ctx, $source, $id, $variants, $warnings): array {
@@ -266,7 +279,7 @@ final class ImageWorkflow
             throw new HttpException(503, 'Image processing unavailable');
         } finally {
             foreach ($variants as $variant) {
-                if (!$committed) {
+                if (!$committed && !in_array($variant['storage_key'], $durableKeys, true)) {
                     $this->files->delete(['storage_key' => (string) $variant['storage_key'], 'preview_key' => (string) $variant['preview_key']]);
                 }
             }

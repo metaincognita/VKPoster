@@ -55,6 +55,50 @@ class OutboxTests(unittest.IsolatedAsyncioTestCase):
             self.store.db.execute("SELECT COUNT(*) FROM outbox").fetchone()[0], 1
         )
 
+    async def test_delete_tombstone_durable_restart_and_album_survivor(self):
+        for mid in [10, 11]:
+            self.store.upsert(normalize(123, message(mid, group=999, photo=photo(mid))))
+        self.now[0] += 6
+        self.box.export("source-a", 123)
+        self.store.delete(123, [10])
+        self.box.export("source-a", 123)
+        rows = self.store.db.execute(
+            "SELECT * FROM outbox WHERE json_extract(payload, '$.kind')='delete'"
+        ).fetchall()
+        self.assertEqual(len(rows), 1)
+        event = json.loads(rows[0]["payload"])
+        self.assertEqual(event["payload"]["message_ids"], [10])
+        self.assertEqual(event["payload"]["peer_id"], "123")
+        self.store.close()
+        self.store = Store(self.path, clock=lambda: self.now[0])
+        self.box = Outbox(self.store)
+        self.box.export("source-a", 123)
+        self.assertEqual(
+            self.store.db.execute(
+                "SELECT COUNT(*) FROM outbox WHERE json_extract(payload, '$.kind')='delete'"
+            ).fetchone()[0],
+            1,
+        )
+        self.assertEqual(
+            self.store.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 2
+        )
+        self.assertEqual(
+            self.store.db.execute(
+                "SELECT deleted FROM messages WHERE id=10"
+            ).fetchone()[0],
+            1,
+        )
+
+    async def test_unknown_delete_is_exported_and_late_snapshot_stays_deleted(self):
+        self.store.delete(123, [88])
+        self.box.export("source-a", 123)
+        row = self.store.db.execute("SELECT payload FROM outbox").fetchone()
+        self.assertEqual(json.loads(row[0])["payload"]["message_ids"], [88])
+        self.assertFalse(self.store.upsert(normalize(123, message(88))))
+        self.assertEqual(
+            self.store.db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 0
+        )
+
     async def test_album_one_snapshot_and_edit_same_message(self):
         for mid in [10, 11]:
             self.store.upsert(normalize(123, message(mid, group=999, photo=photo(mid))))

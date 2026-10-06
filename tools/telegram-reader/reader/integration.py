@@ -204,6 +204,32 @@ class Outbox:
                 },
             )
 
+        for row in self.store.db.execute(
+            "SELECT id FROM messages WHERE channel=? AND deleted=1 ORDER BY id",
+            (str(channel),),
+        ).fetchall():
+            key = f"deleted:{channel}:{row['id']}"
+            observed = self.store.get(key)
+            if observed is None:
+                observed = self.store.clock()
+                self.store.set(key, observed)
+        # Also export deletion updates observed before the corresponding message snapshot.
+        for row in self.store.db.execute(
+            "SELECT key,value FROM metadata WHERE key LIKE ? ORDER BY key",
+            (f"deleted:{channel}:%",),
+        ).fetchall():
+            self.enqueue(
+                source_id,
+                "delete",
+                {
+                    "peer_id": str(channel),
+                    "message_ids": [int(row["key"].rsplit(":", 1)[1])],
+                    "deleted_at": datetime.fromtimestamp(
+                        json.loads(row["value"]), timezone.utc
+                    ).isoformat(),
+                },
+            )
+
     async def deliver(self, api, enabled):
         delivered = 0
         for source in sorted(enabled):

@@ -66,8 +66,10 @@ return new class () implements Migration {
                     foreach (['source_text_processings', 'source_image_processings', 'source_video_generations'] as $table) {
                         $db->execute('UPDATE ' . $table . ' SET selection_hash=? WHERE workspace_id=? AND item_id=? AND revision_hash=? AND selection_hash=?', [$newHash, $row['workspace_id'], $row['item_id'], $revision, $oldHash]);
                     }
+                    $oldKey = hash('sha256', 'material:' . $row['item_id'] . ':' . $revision . ':' . $oldHash);
                     $key = hash('sha256', 'material:' . $row['item_id'] . ':' . $revision . ':' . $newHash);
-                    $db->execute('UPDATE content_post_origins SET selection_hash=?, idempotency_key=? WHERE workspace_id=? AND item_id=? AND revision_hash=? AND selection_hash=?', [$newHash, $key, $row['workspace_id'], $row['item_id'], $revision, $oldHash]);
+                    // Copies keep their own identity; only the original export key changes.
+                    $db->execute('UPDATE content_post_origins SET selection_hash=?, idempotency_key=IF(idempotency_key=?, ?, idempotency_key) WHERE workspace_id=? AND item_id=? AND revision_hash=? AND selection_hash=?', [$newHash, $oldKey, $key, $row['workspace_id'], $row['item_id'], $revision, $oldHash]);
                 });
             }
         } while (count($rows) === 100);

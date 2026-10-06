@@ -32,6 +32,8 @@ class Store:
 
     def upsert(self, payload):
         channel, mid = payload["channel_id"], payload["message_id"]
+        if self.get(f"deleted:{channel}:{mid}") is not None:
+            return False
         old = self.db.execute(
             "SELECT * FROM messages WHERE channel=? AND id=?", (channel, mid)
         ).fetchone()
@@ -78,6 +80,11 @@ class Store:
                     "SELECT grouped_id FROM messages WHERE channel=? AND id=?",
                     (str(channel), mid),
                 ).fetchone()
+                key = f"deleted:{channel}:{mid}"
+                self.db.execute(
+                    "INSERT OR IGNORE INTO metadata(key,value) VALUES(?,?)",
+                    (key, json.dumps(self.clock())),
+                )
                 self.db.execute(
                     "UPDATE messages SET deleted=1 WHERE channel=? AND id=?",
                     (str(channel), mid),

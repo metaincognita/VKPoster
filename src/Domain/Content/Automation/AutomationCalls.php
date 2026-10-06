@@ -29,6 +29,37 @@ final class AutomationCalls
             return false;
         }
         $key = hash('sha256', $jobId . ':' . $operation);
-        return $this->db->execute('INSERT IGNORE INTO content_automation_calls (workspace_id, operation_key, operation, created_at) VALUES (?, ?, ?, ?)', [$workspaceId, $key, $operation, DbTime::format($this->clock->now())]) === 1;
+        return $this->db->transaction(function () use ($workspaceId, $key, $operation): bool {
+            $row = $this->db->select('SELECT * FROM content_automation_calls WHERE workspace_id=? AND operation_key=? FOR UPDATE', [$workspaceId, $key])[0] ?? null;
+            $now = DbTime::format($this->clock->now());
+            if ($row === null) {
+                $this->db->execute("INSERT INTO content_automation_calls (workspace_id, operation_key, operation, created_at, status) VALUES (?, ?, ?, ?, 'uncertain')", [$workspaceId, $key, $operation, $now]);
+                return true;
+            }
+            if ($row['status'] === 'retryable' && $row['available_at'] <= $now && (int) $row['attempts'] < 5) {
+                $this->db->execute("UPDATE content_automation_calls SET status='uncertain', attempts=attempts+1 WHERE id=?", [$row['id']]);
+                return true;
+            }
+            if ($row['status'] === 'retryable' && (int) $row['attempts'] < 5) {
+                throw new \App\Integrations\ContentProviders\ProviderException('retry_backoff', true);
+            }
+            return false;
+        });
+    }
+
+    /** @return list<array<string,mixed>>|null Archived successful variants, reusable without provider replay. */
+    public function imageResult(int $workspaceId, string $jobId, string $operation): ?array
+    {
+        $row = $this->db->select("SELECT result_json FROM content_automation_calls WHERE workspace_id=? AND operation_key=? AND status='success'", [$workspaceId, hash('sha256', $jobId . ':' . $operation)])[0] ?? null;
+        return $row === null ? null : json_decode((string) $row['result_json'], true, 32, JSON_THROW_ON_ERROR);
+    }
+    /** @param list<array<string,mixed>> $variants */
+    public function imageSuccess(int $workspaceId, string $jobId, string $operation, array $variants): void
+    {
+        $this->db->execute("UPDATE content_automation_calls SET status='success', result_json=?, error_category=NULL WHERE workspace_id=? AND operation_key=? AND status='uncertain'", [json_encode($variants, JSON_THROW_ON_ERROR), $workspaceId, hash('sha256', $jobId . ':' . $operation)]);
+    }
+    public function imageFailure(int $workspaceId, string $jobId, string $operation, \App\Integrations\ContentProviders\ProviderException $error): void
+    {
+        $this->db->execute("UPDATE content_automation_calls SET status=?, error_category=?, available_at=? WHERE workspace_id=? AND operation_key=? AND status='uncertain'", [$error->retryable ? 'retryable' : 'uncertain', $error->category, DbTime::format($this->clock->now()->modify('+60 seconds')), $workspaceId, hash('sha256', $jobId . ':' . $operation)]);
     }
 }

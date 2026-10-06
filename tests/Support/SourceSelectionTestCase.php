@@ -14,6 +14,7 @@ abstract class SourceSelectionTestCase extends WorkspaceTestCase
     {
         // Legacy DDL rollback tests recreate their original tables; restore additive review columns.
         (require \App\Tests\Support\TestEnv::basePath() . '/database/migrations/2026_10_07_000032_review_fixes.php')->up(\App\Tests\Support\TestEnv::connection());
+        (require \App\Tests\Support\TestEnv::basePath() . '/database/migrations/2026_10_07_000033_independent_review.php')->up(\App\Tests\Support\TestEnv::connection());
         parent::tearDown();
     }
 
@@ -47,7 +48,7 @@ abstract class SourceSelectionTestCase extends WorkspaceTestCase
         foreach ($this->db->select("SELECT id FROM semantic_selection_evaluations WHERE status='pending' ORDER BY id") as $row) {
             $c->get(\App\Domain\Source\Selection\SemanticSelection::class)->run((int) $row['id'], $c->get(\App\Domain\Source\Selection\SelectionService::class));
         }
-        $this->db->execute("DELETE j FROM jobs j LEFT JOIN semantic_selection_evaluations e ON e.id=JSON_UNQUOTE(JSON_EXTRACT(j.payload_json, '$.data.attempt_id')) WHERE JSON_UNQUOTE(JSON_EXTRACT(j.payload_json, '$.class'))=? AND (e.id IS NULL OR e.status IN ('completed','failed','blocked','stale'))", [\App\Jobs\Content\SemanticSelectionJob::class]);
+        $this->db->execute("DELETE j FROM jobs j LEFT JOIN semantic_selection_evaluations e ON e.id=JSON_UNQUOTE(JSON_EXTRACT(j.payload_json, '$.data.attempt_id')) WHERE JSON_UNQUOTE(JSON_EXTRACT(j.payload_json, '$.class'))=? AND (e.id IS NULL OR e.status IN ('completed','failed','blocked','stale','cancelled'))", [\App\Jobs\Content\SemanticSelectionJob::class]);
     }
 
     /**

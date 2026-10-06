@@ -36,7 +36,7 @@ final class ContentMaintenance
         $cutoff = $this->clock->now()->modify('-' . $this->config->int('content_operations.retention_days', 30) . ' days');
         $remove = $apply && $this->config->bool('content_operations.retention_enabled');
         $counts = ['objects' => 0, 'temporary' => 0, 'deleted' => 0];
-        $rows = $this->db->select("SELECT o.storage_key FROM content_storage_objects o WHERE o.deleted_at IS NULL AND o.created_at<? AND NOT EXISTS (SELECT 1 FROM source_image_variants v WHERE v.storage_key=o.storage_key OR v.preview_key=o.storage_key) AND NOT EXISTS (SELECT 1 FROM source_video_generations g WHERE JSON_UNQUOTE(JSON_EXTRACT(g.result_json, '$.storage_key'))=o.storage_key OR JSON_UNQUOTE(JSON_EXTRACT(g.basis_json, '$.image.storage_key'))=o.storage_key) ORDER BY o.created_at LIMIT 100", [DbTime::format($cutoff)]);
+        $rows = $this->db->select("SELECT o.storage_key FROM content_storage_objects o WHERE o.deleted_at IS NULL AND o.created_at<? AND NOT EXISTS (SELECT 1 FROM source_image_variants v WHERE v.storage_key=o.storage_key OR v.preview_key=o.storage_key) AND NOT EXISTS (SELECT 1 FROM source_video_generations g WHERE JSON_UNQUOTE(JSON_EXTRACT(g.result_json, '$.storage_key'))=o.storage_key OR JSON_UNQUOTE(JSON_EXTRACT(g.basis_json, '$.image.storage_key'))=o.storage_key) AND NOT EXISTS (SELECT 1 FROM content_automation_calls c WHERE JSON_SEARCH(c.result_json, 'one', o.storage_key) IS NOT NULL) ORDER BY o.created_at LIMIT 100", [DbTime::format($cutoff)]);
         foreach ($rows as $row) {
             $this->db->transaction(function () use ($row, $cutoff, $remove, &$counts): void {
                 $key = (string) $row['storage_key'];
@@ -47,7 +47,8 @@ final class ContentMaintenance
                 // Every reference is a pin, including stale history and video bases. Unknown legacy objects are never scanned.
                 $image = $this->db->select('SELECT id FROM source_image_variants WHERE storage_key=? OR preview_key=? LIMIT 1', [$key, $key]);
                 $video = $this->db->select("SELECT id FROM source_video_generations WHERE JSON_UNQUOTE(JSON_EXTRACT(result_json, '$.storage_key'))=? OR JSON_UNQUOTE(JSON_EXTRACT(basis_json, '$.image.storage_key'))=? LIMIT 1", [$key, $key]);
-                if ($image !== [] || $video !== []) {
+                $cached = $this->db->select("SELECT id FROM content_automation_calls WHERE JSON_SEARCH(result_json, 'one', ?) IS NOT NULL LIMIT 1", [$key]);
+                if ($image !== [] || $video !== [] || $cached !== []) {
                     return;
                 }
                 ++$counts['objects'];

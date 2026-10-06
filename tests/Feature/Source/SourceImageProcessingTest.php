@@ -305,4 +305,89 @@ final class SourceImageProcessingTest extends SourceSelectionTestCase
         self::assertSame([], $workflow->jobs([]));
     }
 
+    /** @return iterable<string,array{string,bool}> */
+    public static function imageFailures(): iterable
+    {
+        yield 'search 429' => ['rate_limited', false];
+        yield 'search confirmed 503' => ['unavailable', false];
+        yield 'enhancement 429' => ['rate_limited', true];
+        yield 'enhancement confirmed 503' => ['unavailable', true];
+    }
+    #[\PHPUnit\Framework\Attributes\DataProvider('imageFailures')]
+    public function testConfirmedImageFailuresRetryWithoutRepeatingSuccessfulOperations(string $category, bool $enhancement): void
+    {
+        [$source, $ctx, $item, $revision] = $this->fixture();
+        $c = $this->app->container();
+        $search = $this->createMock(ImageSearchProvider::class);
+        $search->method('name')->willReturn('fixture_search');
+        if ($enhancement) {
+            $search->expects(self::once())->method('search')->willReturn([new ImageCandidate(SourceImageFixture::bytes(1600), 'https://example.com/original.jpg')]);
+        } else {
+            $search->expects(self::exactly(2))->method('search')->willReturnCallback(static function () use ($category, &$calls): array {
+                $calls = ($calls ?? 0) + 1;
+                if ($calls === 1) {
+                    throw new \App\Integrations\ContentProviders\ProviderException($category, true);
+                }
+                return [];
+            });
+        }
+        $enhancer = $this->createMock(ImageEnhancementProvider::class);
+        $enhancer->method('name')->willReturn('fixture_enhancement');
+        if ($enhancement) {
+            $enhancer->expects(self::exactly(2))->method('enhance')->willReturnCallback(static function () use ($category, &$enhanceCalls): ?string {
+                $enhanceCalls = ($enhanceCalls ?? 0) + 1;
+                if ($enhanceCalls === 1) {
+                    throw new \App\Integrations\ContentProviders\ProviderException($category, true);
+                }
+                return null;
+            });
+        } else {
+            $enhancer->expects(self::once())->method('enhance')->willReturn(null);
+        }
+        $c->instance(ImageSearchProvider::class, $search);
+        $c->instance(ImageEnhancementProvider::class, $enhancer);
+        $c->get(SelectionService::class)->decide($ctx, $source, $item['public_id'], true);
+        $workflow = $c->get(ImageWorkflow::class);
+        $workflow->request($ctx, $source, $item['public_id'], $revision);
+        $payload = $this->payload($workflow->jobs()[0]);
+        self::assertSame(503, $this->api($payload)->status);
+        self::assertSame('retryable', $this->db->select("SELECT status FROM content_automation_calls WHERE operation=?", [$enhancement ? 'image_enhancement' : 'image_search'])[0]['status']);
+        self::assertSame(503, $this->api($payload)->status);
+        if ($enhancement) {
+            $cached = json_decode((string) $this->db->select("SELECT result_json FROM content_automation_calls WHERE operation='image_search'")[0]['result_json'], true, 32, JSON_THROW_ON_ERROR);
+            self::assertCount(1, $cached);
+            self::assertArrayHasKey($cached[0]['storage_key'], $this->storage->objects);
+            self::assertArrayHasKey($cached[0]['preview_key'], $this->storage->objects);
+        }
+        $this->clock->advance(61);
+        self::assertSame(200, $this->api($payload)->status);
+        self::assertSame('completed', ($this->db->table('source_image_processings')->first() ?? throw new \LogicException('Missing processing'))['status']);
+        self::assertSame(200, $this->api($payload)->status);
+    }
+    /** @return iterable<string,array{bool}> */
+    public static function uncertainOperations(): iterable
+    {
+        yield 'search' => [false];
+        yield 'enhancement' => [true];
+    }
+    #[\PHPUnit\Framework\Attributes\DataProvider('uncertainOperations')]
+    public function testUncertainImageOutcomeCannotRepeatPaidOperation(bool $enhancement): void
+    {
+        [$source, $ctx, $item, $revision] = $this->fixture();
+        $c = $this->app->container();
+        $provider = $this->createMock($enhancement ? ImageEnhancementProvider::class : ImageSearchProvider::class);
+        $provider->method('name')->willReturn('fixture');
+        $provider->expects(self::once())->method($enhancement ? 'enhance' : 'search')->willThrowException(new \App\Integrations\ContentProviders\ProviderException('outcome_unknown'));
+        $c->instance($enhancement ? ImageEnhancementProvider::class : ImageSearchProvider::class, $provider);
+        $c->get(SelectionService::class)->decide($ctx, $source, $item['public_id'], true);
+        $workflow = $c->get(ImageWorkflow::class);
+        $workflow->request($ctx, $source, $item['public_id'], $revision);
+        $payload = $this->payload($workflow->jobs()[0]);
+        $response = $this->api($payload);
+        self::assertSame(200, $response->status);
+        $retry = $this->api($payload);
+        self::assertSame(200, $retry->status);
+        self::assertSame('uncertain', $this->db->select('SELECT status FROM content_automation_calls WHERE operation=?', [$enhancement ? 'image_enhancement' : 'image_search'])[0]['status']);
+    }
+
 }

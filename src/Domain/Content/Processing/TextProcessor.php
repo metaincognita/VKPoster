@@ -36,6 +36,9 @@ final class TextProcessor
         if ($messages !== []) {
             $parts = [];
             foreach ($messages as $message) {
+                if (isset(json_decode((string) ($message['metadata_json'] ?? '{}'), true, 32, JSON_THROW_ON_ERROR)['deleted_at'])) {
+                    continue;
+                }
                 $text = (string) $message['text'];
                 $entities = json_decode((string) $message['entities_json'], true, 32, JSON_THROW_ON_ERROR);
                 $ranges = [];

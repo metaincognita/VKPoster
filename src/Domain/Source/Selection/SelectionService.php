@@ -49,12 +49,15 @@ final class SelectionService
         });
     }
 
-    /** Manual approval/rejection survives future edits and automatic rule recalculations. */
+    /** Manual approval/rejection binds to this exact revision and survives rule recalculation only. */
     public function decide(WorkspaceContext $context, Source $source, string $itemPublicId, bool $approve): void
     {
         $this->db->transaction(function () use ($context, $source, $itemPublicId, $approve): void {
             $this->lock($context, $source);
-            $item = $this->db->select('SELECT id FROM source_items WHERE workspace_id = ? AND source_id = ? AND public_id = ?', [$context->workspaceId, $source->id, $itemPublicId])[0] ?? throw new HttpException(404, 'Not found');
+            $item = $this->db->select('SELECT id, status, connection_version FROM source_items WHERE workspace_id = ? AND source_id = ? AND public_id = ?', [$context->workspaceId, $source->id, $itemPublicId])[0] ?? throw new HttpException(404, 'Not found');
+            if ($item['status'] === 'deleted' || (int) $item['connection_version'] !== $source->connectionVersion) {
+                throw new HttpException(409, 'Материал удалён или подключение изменилось.');
+            }
             $this->write($context->workspaceId, $source->id, (int) $item['id'], new SelectionResult($approve ? 'approved' : 'rejected', $approve ? 'Принято вручную.' : 'Отклонено вручную.', $approve ? 'manual.approve' : 'manual.reject'), 'manual', $context->userId);
             $this->audit->record($approve ? 'source.item_approved' : 'source.item_rejected', $context->userId, 'source_item', $itemPublicId, [], $context->workspaceId);
         });
@@ -85,12 +88,18 @@ final class SelectionService
      * @param list<array<string,mixed>> $rawMessages */
     public function deterministic(int $workspaceId, ?int $sourceId, array $item, array $rawMessages): SelectionResult
     {
+        if (($item['status'] ?? 'stored') === 'deleted') {
+            return new SelectionResult('rejected', 'Материал удалён в Telegram.', 'source.deleted');
+        }
         if ($sourceId === null) {
             return $this->engine->evaluate(SelectionRules::fromInput([]), (string) $item['text'], (string) $item['content_type'], $rawMessages);
         }
         $messages = [];
         foreach ($rawMessages as $row) {
             $metadata = json_decode((string) $row['metadata_json'], true, 32, JSON_THROW_ON_ERROR);
+            if (isset($metadata['deleted_at'])) {
+                continue;
+            }
             $messages[] = ['entities' => json_decode((string) $row['entities_json'], true, 32, JSON_THROW_ON_ERROR), 'forward' => $metadata['forward'] ?? null, 'forward_known' => $metadata['forward_known'] ?? false];
         }
         $row = $this->db->select('SELECT rules_json FROM source_selection_rules WHERE workspace_id = ? AND source_id = ?', [$workspaceId, $sourceId])[0] ?? null;

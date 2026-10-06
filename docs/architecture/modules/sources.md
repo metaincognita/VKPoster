@@ -149,3 +149,25 @@ Optional per-Source/Radar policies enqueue the existing Queue through Schedule o
 ## Review fixes: Telegram connection identity
 
 Migration 32 adds a monotonically increasing `connection_version` to Source and records it on imported items. Changing normalized username increments the generation under a row lock. Reader snapshots carry that generation; stale durable envelopes are quarantined without changing their original payload. Ingress rejects obsolete bindings before writing an event. Current material listings, processing and Draft publication guards require the current connection generation; prior items remain stored for history. Reader photo delivery filters available readers before a bounded per-Source round-robin query, preventing an unavailable Source from occupying the whole batch.
+
+
+## Independent review fixes — round 2
+
+Migration 33 scopes item/message uniqueness by Source connection generation:
+(source_id, connection_version, peer_id, item_key/message_id). Returning A → B → A
+creates a current-generation item while retaining prior items and their guards.
+Rollback rejects conflicting generations before any DDL; it never merges history.
+
+The reader emits explicit `kind=delete` envelopes with peer_id, message_ids and
+UTC deleted_at. The authenticated ingress retains the envelope and message data,
+records metadata.deleted_at, rebuilds the active album members and recalculates
+revision-bound selection in the same transaction before ACK. Fully deleted items
+have status deleted and cannot receive a new manual approval. Partial albums
+retain surviving members; the old approval, processing and Draft become stale.
+Sticky tombstones also protect against delayed snapshots and ACK-loss reordering.
+
+Semantic completion updates the final Selection inside its commit transaction,
+even when a new semantic dispatch would not be allowed outside Automation.
+Pending workers recheck the live policy, semantic enablement, revision and settings
+version before dispatch. Revoked permission cancels the attempt without provider
+execution or a failed job.

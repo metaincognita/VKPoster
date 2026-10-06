@@ -18,9 +18,11 @@ final class ReplicateImageEnhancementProvider implements ImageEnhancementProvide
     private array $details = [];
     /** @var Closure(int):void */
     private readonly Closure $sleep;
+    private readonly \App\Support\Clock $clock;
     /** @param (Closure(int):void)|null $sleep */
-    public function __construct(private readonly ReplicateApi $api, private readonly SafeDownloads $downloads, ?Closure $sleep = null)
+    public function __construct(private readonly ReplicateApi $api, private readonly SafeDownloads $downloads, ?Closure $sleep = null, ?\App\Support\Clock $clock = null)
     {
+        $this->clock = $clock ?? new \App\Support\SystemClock();
         $this->sleep = $sleep ?? static function (int $microseconds): void {
             usleep($microseconds);
         };
@@ -45,13 +47,16 @@ final class ReplicateImageEnhancementProvider implements ImageEnhancementProvide
         $row = $this->api->call('POST', '/predictions', ['version' => self::VERSION, 'input' => ['image' => $url, 'scale' => 2, 'face_enhance' => false]], 30);
         $id = ReplicateApi::id($row);
         $this->details['provider_job_id'] = $id;
+        $deadline = $this->clock->now()->modify('+30 seconds');
+        $terminal = false;
         try {
             // Model execution is limited remotely to 30 seconds; never leave expensive orphan work on timeout.
-            for ($i = 0; $i < 6; ++$i) {
+            while (true) {
                 if (ReplicateApi::id($row) !== $id) {
                     throw new ProviderException('prediction_mismatch');
                 }
                 $this->details = array_merge($this->details, ReplicateApi::metadata($row));
+                $terminal = in_array($row['status'] ?? '', ['succeeded', 'failed', 'canceled', 'cancelled'], true);
                 if (($row['status'] ?? '') === 'succeeded') {
                     if (!is_string($row['output'] ?? null)) {
                         throw new ProviderException('invalid_enhancement_output');
@@ -61,14 +66,22 @@ final class ReplicateImageEnhancementProvider implements ImageEnhancementProvide
                 if (!in_array($row['status'] ?? '', ['starting', 'processing'], true)) {
                     throw new ProviderException('enhancement_failed');
                 }
-                ($this->sleep)(500000);
+                if ($this->clock->now() >= $deadline) {
+                    throw new ProviderException('enhancement_timeout');
+                }
+                ($this->sleep)(1000000);
                 $row = $this->api->call('GET', '/predictions/' . $id);
             }
-            throw new ProviderException('enhancement_timeout');
         } catch (\Throwable $e) {
-            try {
-                $this->api->call('POST', '/predictions/' . $id . '/cancel');
-            } catch (\Throwable) {
+            if (!$terminal) {
+                try {
+                    $this->api->call('POST', '/predictions/' . $id . '/cancel');
+                } catch (\Throwable) {
+                }
+            }
+            // A remote prediction already exists: retrying the whole operation could charge twice.
+            if ($e instanceof ProviderException && $e->retryable) {
+                throw new ProviderException('enhancement_outcome_unknown');
             }
             throw $e;
         }

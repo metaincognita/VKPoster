@@ -101,7 +101,7 @@ final class SemanticSelection
     private function prepare(int $workspaceId, ?int $sourceId, string $origin, int $id, string $revision, SemanticSelectionInput $input, SelectionResult $deterministic, bool $automationCall): ?array
     {
         $settings = $this->settings($workspaceId, $sourceId);
-        if (!$settings['settings']->enabled || !$this->automation->semanticAllowed($workspaceId, $sourceId, $automationCall)) {
+        if (!$settings['settings']->enabled) {
             return null;
         }
         $detHash = self::deterministicHash($deterministic);
@@ -109,13 +109,16 @@ final class SemanticSelection
         if ($prior !== null) {
             return $prior;
         }
+        if (!$this->automation->semanticAllowed($workspaceId, $sourceId, $automationCall)) {
+            return null;
+        }
         $now = DbTime::format($this->clock->now());
         $row = ['workspace_id' => $workspaceId, 'scope_key' => self::scope($sourceId), 'origin_type' => $origin, 'origin_id' => $id, 'revision_hash' => $revision, 'deterministic_hash' => $detHash, 'settings_version' => $settings['version'], 'settings_snapshot_json' => json_encode($settings['settings']->snapshot(), JSON_THROW_ON_ERROR), 'provider' => $this->provider->name(), 'status' => 'blocked', 'deterministic_status' => $deterministic->status, 'deterministic_reason' => $deterministic->reason, 'deterministic_rule' => $deterministic->rule, 'final_decision' => $deterministic->status, 'final_reason' => $deterministic->reason, 'created_at' => $now, 'finished_at' => $now];
         if ($deterministic->status === 'approved') {
             $row['status'] = 'pending';
             $row['final_decision'] = 'needs_review';
             $row['final_reason'] = 'Ожидается смысловая оценка.';
-            $row['input_json'] = json_encode(['revision' => $input->revision], JSON_THROW_ON_ERROR);
+            $row['input_json'] = json_encode(['revision' => $input->revision, 'automation_call' => $automationCall], JSON_THROW_ON_ERROR);
         }
         $this->db->table('semantic_selection_evaluations')->insert($row);
         $attemptId = (int) $this->db->lastInsertId();
@@ -137,6 +140,12 @@ final class SemanticSelection
                     throw new \App\Integrations\ContentProviders\ProviderException('attempt_in_progress', true);
                 }
                 $this->db->execute("UPDATE semantic_selection_evaluations SET status='failed', error_category='outcome_unknown', error=?, final_decision='needs_review', final_reason=?, finished_at=? WHERE id=? AND status='processing'", ['Исход вызова не подтверждён. Проверьте provider перед повтором.', 'Нужна ручная проверка.', DbTime::format($this->clock->now()), $attemptId]);
+                return null;
+            }
+            $sourceId = str_starts_with((string) $row['scope_key'], 'source:') ? (int) substr((string) $row['scope_key'], 7) : null;
+            $input = json_decode((string) ($row['input_json'] ?? '{}'), true, 32, JSON_THROW_ON_ERROR);
+            if (!$this->settings((int) $row['workspace_id'], $sourceId)['settings']->enabled || !$this->automation->semanticAllowed((int) $row['workspace_id'], $sourceId, (bool) ($input['automation_call'] ?? false))) {
+                $this->db->execute("UPDATE semantic_selection_evaluations SET status='cancelled', final_decision='needs_review', final_reason=?, finished_at=? WHERE id=?", ['Оценка отменена настройками.', DbTime::format($this->clock->now()), $attemptId]);
                 return null;
             }
             if (!$this->attemptCurrent($row)) {

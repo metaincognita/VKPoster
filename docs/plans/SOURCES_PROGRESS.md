@@ -237,3 +237,49 @@ Regression: full PHP suite **2049 tests / 38754 assertions**, passed. Reader **5
 No external live API calls were made; pending live-credentials checks remain unchanged. Publishing keeps the existing pipeline. Main and stash@{0} remain intact. Local .DS_Store, env/session/runtime files and credentials are excluded from this checkpoint.
 
 Review UI/axe: isolated app_test, four Source/Radar settings/material pages, 24 screenshots (375/768/1440 x light/dark), axe 360/375/768/1440; no blocking issues or horizontal overflow. Screenshot inspected. Production consent and live workspace data unchanged.
+
+
+## Independent review fixes — round 2 — completed
+
+Fixed only the agreed 1 Blocker + 6 Important findings; Nice to have remains out
+of scope. No new providers, publishing paths or external live calls were added.
+
+1. Semantic worker commits final rejected/needs_review with the saved evaluation
+   immediately, before another scheduler tick; processing/Draft stay blocked.
+2. Migration 32 updates the original export identity while preserving copy keys
+   and all origin links. Upgrade with an original Draft and two copies passes.
+3. Migration 33 includes connection_version in both item/message unique keys.
+   A → B → A retains history and creates a visible, processable current generation.
+4. Pending semantic attempts recheck Automation, semantic enablement, material
+   revision and settings version before dispatch; revoked permission cancels
+   safely without a provider call or failed job.
+5. Durable image calls distinguish success, confirmed retryable failure and
+   uncertain outcome. Confirmed errors use bounded retry/backoff; successful
+   variants survive retry of the next operation. Uncertain paid outcomes cannot
+   repeat, including polling failures after Replicate prediction creation.
+6. Enhancement polling checks every response before its elapsed-time deadline,
+   including success on the last poll; completed predictions are not cancelled.
+7. Reader emits durable deletion envelopes, including unseen-message tombstones.
+   Ingress retains message/event history, rebuilds remaining album members and
+   invalidates previous approval, processing and Draft revisions. Delayed
+   snapshots cannot resurrect deleted messages. Deletion audit is workspace scoped.
+
+Regression: full PHP suite **2070 tests / 38955 assertions**, passed; reader
+**59 autonomous tests**, passed (two separate HTTP cases excluded from that count).
+Both reader/PHP HTTP contracts passed: 2 items / 4 messages, 4 image jobs /
+8 variants, ACK/restart/dedup. Explicit migration upgrade plus rollback/replay:
+**2 tests / 12 assertions**, passed, including original Draft + two copies.
+Rollback rejects conflicting connection generations before DDL instead of losing
+history. Migration 33 is applied locally; deployment must pause old app workers
+and reader, migrate, then restart the updated services.
+
+PHPStan level 8 + strict rules, Ruff 0.14.1, code style, /healthz DB/Redis,
+synthetic nested-secret Docker context/image test and local credential-value scan
+passed. The publishing pipeline remains unchanged. External live checks remain
+pending as documented above; no credentials were requested and no paid API calls
+were made. Main and stash@{0} are preserved; local .DS_Store, env, sessions and
+runtime files are excluded.
+
+Round 2 UI/axe: isolated app_test Source/Radar settings/material pages, 24 screenshots
+(375/768/1440 × light/dark) and axe 360/375/768/1440; no blocking issues or
+horizontal overflow. Screenshot inspected; live consent/workspace unchanged.

@@ -16,6 +16,7 @@ final class SourceMigrationTest extends TestCase
     {
         // Legacy DDL rollback tests recreate their original tables; restore additive review columns.
         (require \App\Tests\Support\TestEnv::basePath() . '/database/migrations/2026_10_07_000032_review_fixes.php')->up(\App\Tests\Support\TestEnv::connection());
+        (require \App\Tests\Support\TestEnv::basePath() . '/database/migrations/2026_10_07_000033_independent_review.php')->up(\App\Tests\Support\TestEnv::connection());
         parent::tearDown();
     }
 

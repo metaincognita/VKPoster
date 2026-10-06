@@ -159,7 +159,7 @@ final class ContentDraftService
             }
         }
         $photos = $this->materials->messages($ctx, $source, $itemId);
-        $count = count(array_filter($photos, static fn (array $m): bool => (json_decode((string) ($m['media_json'] ?? 'null'), true)['kind'] ?? '') === 'photo'));
+        $count = count(array_filter($photos, static fn (array $m): bool => !isset(json_decode((string) $m['metadata_json'], true)['deleted_at']) && (json_decode((string) ($m['media_json'] ?? 'null'), true)['kind'] ?? '') === 'photo'));
         if (count($selected) !== $count) {
             throw new HttpException(409, 'Сначала обработайте и выберите изображение для каждой фотографии материала.');
         }

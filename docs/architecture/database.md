@@ -389,3 +389,16 @@ Nullable `provider_metadata_json` on `source_text_processings`, `semantic_select
 Migration 30: `content_automation_settings` (workspace/scope/version + policy snapshot + Discovery interval/cursor), `content_automation_runs` (revision checkpoints, attempts, outcomes, processing/draft references), `content_automation_calls` (durable pre-call image cost fence). All tenant-owned data cascades with workspace; Sources remain separate from Channels. See [automation](modules/content-automation.md).
 
 Migration 31: `content_storage_objects` registers immutable content media before upload for crash-safe orphan retention. Referenced files and audit/recovery histories are pinned. Rollback forgets registry only, never deletes media. See [content hardening](modules/content-hardening.md).
+
+
+### Independent review migration 33
+
+`2026_10_07_000033_independent_review.php` adds
+source_messages.connection_version and backfills it from the parent item.
+The unique keys for source_items/source_messages include connection_version,
+preserving A → B → A history. Down refuses to collapse overlapping generations
+before any DDL. content_automation_calls gains status/error_category/attempts/
+available_at/result_json for bounded confirmed retries and durable successful
+variants; uncertain legacy fences cannot replay. Telegram tombstones remain in
+source_events plus source_messages.metadata_json, without erasing message history.
+Migration 32 preserves original-versus-copy Draft keys when recalculating hashes.

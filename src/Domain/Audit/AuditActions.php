@@ -37,6 +37,7 @@ final class AuditActions
         'source.text_failed' => 'Ошибка обработки текста',
         'source.text_stale' => 'Обработка текста устарела',
         'source.rules_updated' => 'Изменены правила отбора',
+        'source.item_deleted' => 'Материал удалён в Telegram',
         'source.item_approved' => 'Материал принят вручную',
         'source.item_rejected' => 'Материал отклонён вручную',
         'source.created' => 'Добавлен источник',

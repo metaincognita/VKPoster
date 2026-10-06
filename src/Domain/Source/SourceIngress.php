@@ -13,7 +13,7 @@ use Symfony\Component\Uid\Ulid;
 /** Privileged reader boundary. Locks each Source and commits event, item and message snapshots atomically before ACK. */
 final class SourceIngress
 {
-    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly SourceEventContract $contract, private readonly \App\Domain\Source\Selection\SelectionService $selection)
+    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly SourceEventContract $contract, private readonly \App\Domain\Source\Selection\SelectionService $selection, private readonly \App\Domain\Audit\AuditLog $audit)
     {
     }
 
@@ -55,6 +55,9 @@ final class SourceIngress
             if ($event['kind'] === 'item') {
                 $this->item($source, $event['payload'], $now);
                 $status = 'connected';
+            } elseif ($event['kind'] === 'delete') {
+                $this->delete($source, $event['payload'], $now);
+                $status = 'connected';
             } else {
                 $status = $event['payload']['status'];
             }
@@ -84,8 +87,11 @@ final class SourceIngress
         foreach ($messages as $message) {
             $date = $this->contract->date($message['date']);
             $edit = $message['edit_date'] === null ? null : $this->contract->date($message['edit_date']);
-            $old = $this->db->select('SELECT item_id, published_at, edited_at FROM source_messages WHERE source_id = ? AND peer_id = ? AND message_id = ?', [$sourceId, $peer, $message['message_id']]);
+            $old = $this->db->select('SELECT item_id, published_at, edited_at, metadata_json FROM source_messages WHERE source_id = ? AND peer_id = ? AND message_id = ? AND connection_version = ?', [$sourceId, $peer, $message['message_id'], (int) $source['connection_version']]);
             if ($old !== []) {
+                if (isset(json_decode((string) $old[0]['metadata_json'], true, 32, JSON_THROW_ON_ERROR)['deleted_at'])) {
+                    continue; // Tombstones are sticky: delayed old snapshots cannot resurrect messages.
+                }
                 if ((int) $old[0]['item_id'] !== $itemId) {
                     throw new HttpException(409, 'Message group changed');
                 }
@@ -93,23 +99,57 @@ final class SourceIngress
                     continue;
                 }
             }
+            // ACK loss may reorder a tombstone and an older snapshot; the durable inbox is authoritative.
+            $tombstone = $this->db->select("SELECT JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.payload.deleted_at')) AS deleted_at FROM source_events WHERE workspace_id=? AND source_id=? AND event_type='delete' AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.connection_version')), '1')=? AND JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.payload.peer_id'))=? AND JSON_CONTAINS(JSON_EXTRACT(payload_json, '$.payload.message_ids'), CAST(? AS JSON)) ORDER BY id LIMIT 1", [$workspaceId, $sourceId, (string) $source['connection_version'], $peer, (string) $message['message_id']])[0] ?? null;
+            $metadata = ['forward' => $message['forward'] ?? null, 'forward_known' => array_key_exists('forward', $message)];
+            if ($tombstone !== null) {
+                $metadata['deleted_at'] = $tombstone['deleted_at'];
+            }
             $this->db->execute(
-                'INSERT INTO source_messages (workspace_id, source_id, item_id, peer_id, message_id, grouped_id, text, entities_json, media_json, metadata_json, published_at, edited_at, revision_hash, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE text=VALUES(text), entities_json=VALUES(entities_json), media_json=VALUES(media_json), metadata_json=VALUES(metadata_json), edited_at=VALUES(edited_at), revision_hash=VALUES(revision_hash), updated_at=VALUES(updated_at)',
-                [$workspaceId, $sourceId, $itemId, $peer, $message['message_id'], $payload['grouped_id'], $message['text'], json_encode($message['entities'], JSON_THROW_ON_ERROR), $message['media'] === null ? null : json_encode($message['media'], JSON_THROW_ON_ERROR), json_encode(['forward' => $message['forward'] ?? null, 'forward_known' => array_key_exists('forward', $message)], JSON_THROW_ON_ERROR), $date, $edit, $message['content_hash'], $now, $now]
+                'INSERT INTO source_messages (workspace_id, source_id, item_id, peer_id, message_id, grouped_id, text, entities_json, media_json, metadata_json, published_at, edited_at, revision_hash, created_at, updated_at, connection_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE text=VALUES(text), entities_json=VALUES(entities_json), media_json=VALUES(media_json), metadata_json=VALUES(metadata_json), edited_at=VALUES(edited_at), revision_hash=VALUES(revision_hash), updated_at=VALUES(updated_at)',
+                [$workspaceId, $sourceId, $itemId, $peer, $message['message_id'], $payload['grouped_id'], $message['text'], json_encode($message['entities'], JSON_THROW_ON_ERROR), $message['media'] === null ? null : json_encode($message['media'], JSON_THROW_ON_ERROR), json_encode($metadata, JSON_THROW_ON_ERROR), $date, $edit, $message['content_hash'], $now, $now, (int) $source['connection_version']]
             );
         }
-        $members = $this->db->select('SELECT text, media_json, published_at, edited_at FROM source_messages WHERE item_id = ? ORDER BY message_id', [$itemId]);
-        if ($members === []) {
-            throw new HttpException(409, 'Empty item');
+        $this->rebuild($workspaceId, $sourceId, $itemId, $now);
+    }
+
+    /**
+     * @param array<string,mixed> $source
+     * @param array<string,mixed> $payload
+     */
+    private function delete(array $source, array $payload, string $now): void
+    {
+        $items = [];
+        foreach ($payload['message_ids'] as $id) {
+            $row = $this->db->select('SELECT * FROM source_messages WHERE workspace_id=? AND source_id=? AND connection_version=? AND peer_id=? AND message_id=? FOR UPDATE', [$source['workspace_id'], $source['id'], $source['connection_version'], $payload['peer_id'], $id])[0] ?? null;
+            if ($row === null) {
+                continue;
+            }
+            $metadata = json_decode((string) $row['metadata_json'], true, 32, JSON_THROW_ON_ERROR);
+            if (isset($metadata['deleted_at'])) {
+                continue;
+            }
+            $metadata['deleted_at'] = $payload['deleted_at'];
+            $this->db->execute('UPDATE source_messages SET metadata_json=?, updated_at=? WHERE id=?', [json_encode($metadata, JSON_THROW_ON_ERROR), $now, $row['id']]);
+            $items[(int) $row['item_id']] = true;
         }
+        foreach (array_keys($items) as $itemId) {
+            $this->rebuild((int) $source['workspace_id'], (int) $source['id'], $itemId, $now);
+            $this->audit->record('source.item_deleted', null, 'source_item', (string) $this->db->select('SELECT public_id FROM source_items WHERE id=?', [$itemId])[0]['public_id'], [], (int) $source['workspace_id']);
+        }
+    }
+
+    private function rebuild(int $workspaceId, int $sourceId, int $itemId, string $now): void
+    {
+        $item = $this->db->select('SELECT * FROM source_items WHERE workspace_id=? AND source_id=? AND id=?', [$workspaceId, $sourceId, $itemId])[0];
+        $members = $this->db->select("SELECT text, media_json, published_at, edited_at FROM source_messages WHERE item_id=? AND JSON_EXTRACT(metadata_json, '$.deleted_at') IS NULL ORDER BY message_id", [$itemId]);
         $text = implode("\n", array_filter(array_map(static fn (array $r): string => (string) $r['text'], $members), static fn (string $t): bool => $t !== ''));
-        // Telegram documents/videos must not masquerade as photos in content selection.
-        $media = $members[0]['media_json'] === null ? null : json_decode((string) $members[0]['media_json'], true, 32, JSON_THROW_ON_ERROR);
-        $type = $payload['grouped_id'] === null ? ($media === null ? 'text' : (is_array($media) && ($media['kind'] ?? null) === 'photo' ? 'photo' : 'other')) : 'album';
+        $media = ($members[0]['media_json'] ?? null) === null ? null : json_decode((string) $members[0]['media_json'], true, 32, JSON_THROW_ON_ERROR);
+        $type = $item['grouped_id'] === null ? ($media === null ? 'text' : (is_array($media) && ($media['kind'] ?? null) === 'photo' ? 'photo' : 'other')) : 'album';
         $dates = array_column($members, 'published_at');
         $edits = array_values(array_filter(array_column($members, 'edited_at'), 'is_string'));
-        $this->db->execute('UPDATE source_items SET text = ?, content_type = ?, published_at = ?, edited_at = ?, updated_at = ? WHERE id = ?', [$text, $type, min($dates === [] ? [$now] : $dates), $edits === [] ? null : max($edits), $now, $itemId]);
+        $this->db->execute('UPDATE source_items SET text=?, content_type=?, status=?, published_at=?, edited_at=?, updated_at=? WHERE id=?', [$text, $type, $members === [] ? 'deleted' : 'stored', $dates === [] ? $item['published_at'] : min($dates), $edits === [] ? null : max($edits), $now, $itemId]);
         $this->selection->evaluateLocked($workspaceId, $sourceId, $itemId);
     }
 }
