@@ -54,7 +54,15 @@ RUN composer dump-autoload --no-dev --classmap-authoritative
 FROM base AS prod
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/50-app.ini
 COPY docker/php/php-prod.ini /usr/local/etc/php/conf.d/60-app-prod.ini
-COPY --chown=app:www-data . /var/www/html
+COPY --chown=app:www-data composer.json composer.lock tailwind.config.js /var/www/html/
+COPY --chown=app:www-data bin /var/www/html/bin
+COPY --chown=app:www-data config /var/www/html/config
+COPY --chown=app:www-data database /var/www/html/database
+COPY --chown=app:www-data public /var/www/html/public
+COPY --chown=app:www-data resources /var/www/html/resources
+COPY --chown=app:www-data scripts /var/www/html/scripts
+COPY --chown=app:www-data src /var/www/html/src
+COPY --chown=app:www-data templates /var/www/html/templates
 COPY --from=vendor --chown=app:www-data /app/vendor /var/www/html/vendor
 RUN sh scripts/build-css.sh \
     && mkdir -p storage/logs storage/cache/twig storage/tmp storage/media \

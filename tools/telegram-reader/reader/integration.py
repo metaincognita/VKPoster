@@ -79,14 +79,19 @@ class InternalAPI:
         if result.get("ack") is not True or result.get("event_id") != event["event_id"]:
             raise ValueError("invalid_ack")
 
-    async def image_jobs(self):
-        result = await asyncio.to_thread(self.request, "/internal/source-image-jobs")
+    async def image_jobs(self, sources=None):
+        path = "/internal/source-image-jobs"
+        if sources is not None:
+            path += "?source_ids=" + urllib.parse.quote(",".join(sorted(sources)))
+        result = await asyncio.to_thread(self.request, path)
         if result.get("version") != 1 or not isinstance(result.get("jobs"), list):
             raise ValueError("invalid_image_job_list")
         return result["jobs"]
 
     async def send_image(self, payload):
-        result = await asyncio.to_thread(self.request, "/internal/source-image-results", payload)
+        result = await asyncio.to_thread(
+            self.request, "/internal/source-image-results", payload
+        )
         if result.get("ack") is not True or result.get("job_id") != payload["job_id"]:
             raise ValueError("invalid_image_ack")
 
@@ -109,13 +114,17 @@ class Outbox:
     def summary(self):
         return {
             "counts": {
-                r[0]: r[1] for r in self.store.db.execute(
+                r[0]: r[1]
+                for r in self.store.db.execute(
                     "SELECT state,COUNT(*) FROM outbox GROUP BY state"
                 )
             },
-            "failed_ids": [r[0] for r in self.store.db.execute(
-                "SELECT event_id FROM outbox WHERE state='failed' LIMIT 10"
-            )],
+            "failed_ids": [
+                r[0]
+                for r in self.store.db.execute(
+                    "SELECT event_id FROM outbox WHERE state='failed' LIMIT 10"
+                )
+            ],
         }
 
     def retry_failed(self, event_id):
@@ -123,7 +132,8 @@ class Outbox:
         with self.store.db:
             return self.store.db.execute(
                 "UPDATE outbox SET state='pending',attempts=0,retry_at=0,error=NULL "
-                "WHERE event_id=? AND state='failed'", (event_id,)
+                "WHERE event_id=? AND state='failed'",
+                (event_id,),
             ).rowcount
 
     def compact(self, retention_days=0):
@@ -144,7 +154,13 @@ class Outbox:
             ).rowcount
 
     def enqueue(self, source_id, kind, payload):
-        event = {"version": 1, "source_id": source_id, "kind": kind, "payload": payload}
+        event = {
+            "version": 1,
+            "source_id": source_id,
+            "kind": kind,
+            "payload": payload,
+            "connection_version": int(self.store.get("binding:" + source_id, 1)),
+        }
         encoded = json.dumps(event, sort_keys=True, ensure_ascii=False)
         event_id = hashlib.sha256(encoded.encode()).hexdigest()
         event["event_id"] = event_id
@@ -191,6 +207,13 @@ class Outbox:
     async def deliver(self, api, enabled):
         delivered = 0
         for source in sorted(enabled):
+            with self.store.db:
+                self.store.db.execute(
+                    "UPDATE outbox SET state='failed',error='obsolete_source_binding' "
+                    "WHERE state='pending' AND source_id=? "
+                    "AND COALESCE(json_extract(payload,'$.connection_version'),1)!=?",
+                    (source, int(self.store.get("binding:" + source, 1))),
+                )
             rows = self.store.db.execute(
                 "SELECT * FROM outbox WHERE state='pending' AND source_id=? ORDER BY rowid LIMIT 100",
                 (source,),
@@ -209,7 +232,10 @@ class Outbox:
                                 attempts,
                                 self.store.clock() + min(300, 2 ** min(attempts, 9)),
                                 type(error).__name__,
-                                "failed" if isinstance(error, urllib.error.HTTPError) and error.code == 422 else "pending",
+                                "failed"
+                                if isinstance(error, urllib.error.HTTPError)
+                                and error.code == 422
+                                else "pending",
                                 row["event_id"],
                             ),
                         )
@@ -274,6 +300,14 @@ class SourceWorker:
                 self.drop(sid)
         for source in sources:
             sid, username = source["id"], source["username"]
+            generation = source.get("connection_version", 1)
+            saved_generation = self.store.get("binding:" + sid, 1)
+            if saved_generation != generation:
+                if sid in self.readers:
+                    self.drop(sid)
+                for key in ("channel_id", "channel_pts", "channel_username"):
+                    SourceStore(self.store, sid).set(key, None)
+            self.store.set("binding:" + sid, generation)
             prior = self.readers.get(sid)
             if prior and prior[0] != username:
                 self.drop(sid)
@@ -376,7 +410,9 @@ async def run_sources(args, state, store):
             try:
                 count = await worker.tick()
                 await api.heartbeat()
-                worker.outbox.compact(int(os.environ.get("READER_ACK_RETENTION_DAYS", "0")))
+                worker.outbox.compact(
+                    int(os.environ.get("READER_ACK_RETENTION_DAYS", "0"))
+                )
                 print(
                     f"sources_cycle active={len(worker.readers)} acked={count}",
                     flush=True,

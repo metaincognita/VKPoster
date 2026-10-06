@@ -19,7 +19,12 @@ final class ImageReaderController
     public function jobs(Request $request): Response
     {
         $this->authenticate($request);
-        return Response::json(['version' => 1, 'jobs' => $this->images->jobs()]);
+        $raw = $request->query['source_ids'] ?? null;
+        if ($raw !== null && (!is_string($raw) || strlen($raw) > 27000)) {
+            throw new HttpException(422, 'Invalid reader sources');
+        }
+        $ids = $raw === null ? null : ($raw === '' ? [] : explode(',', $raw));
+        return Response::json(['version' => 1, 'jobs' => $this->images->jobs($ids)]);
     }
     public function result(Request $request): Response
     {

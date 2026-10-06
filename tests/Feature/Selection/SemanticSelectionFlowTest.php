@@ -37,6 +37,7 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         self::assertSame('approved', $this->decision()['selection_status']);
         self::assertSame(0, $this->db->table('semantic_selection_evaluations')->count());
         $selection->saveSemantic($ctx, $source, new SemanticSettings(true, 'AI технологии; исключать рекламу', 91, 0.8, 'review'));
+        $this->drainSemantic();
         self::assertSame('needs_review', $this->decision()['selection_status']);
         $item = $this->db->table('source_items')->first() ?? throw new \LogicException('No item');
         $semantic = $c->get(SemanticSelection::class);
@@ -47,11 +48,12 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         self::assertSame(0.95, (float) $history[0]['confidence']);
         self::assertSame('needs_review', $history[0]['final_decision']);
         $selection->saveSemantic($ctx, $source, new SemanticSettings(true, 'AI технологии; исключать рекламу', 70, 0.8, 'review'));
+        $this->drainSemantic();
         self::assertSame('approved', $this->decision()['selection_status']);
         $selection->decide($ctx, $source, (string) $item['public_id'], true);
         $manual = $this->decision();
         $this->ingest($source, [$this->message(10, 'Реклама AI', extra: ['edit_date' => '2026-10-05T11:00:00Z'])]);
-        self::assertSame($manual, $this->decision());
+        self::assertSame('rejected', $this->decision()['selection_status']);
         $history = $semantic->history($ws->id, 'material', (int) $item['id']);
         self::assertCount(3, $history);
         self::assertSame('rejected', $history[0]['decision']);
@@ -60,7 +62,8 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         $revision = MaterialRepository::revision($currentItem, $c->get(MaterialRepository::class)->messages($ctx, $source, (int) $item['id']));
         self::assertSame($history[0]['revision_hash'], $revision);
         $selection->saveSemantic($ctx, $source, SemanticSettings::fromInput([]));
-        self::assertSame($manual, $this->decision());
+        $this->drainSemantic();
+        self::assertSame('automatic', $this->decision()['decision_mode']);
         self::assertNull($semantic->current($ws->id, $source->id, 'material', (int) $item['id'], $revision));
         self::assertContains('selection.semantic_settings_updated', $this->auditActions($ws));
         self::assertSame(0, $this->db->table('posts')->count());
@@ -86,6 +89,7 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         $source = $c->get(SourceService::class)->create($ctx, 'Source', 'telegram', '@sample_channel', true);
         $service = $c->get(SelectionService::class);
         $service->saveSemantic($ctx, $source, new SemanticSettings(true, 'AI', 0, 0, 'review'));
+        $this->drainSemantic();
         $this->ingest($source, [$this->message(10, 'AI advertisement')]);
         self::assertSame('needs_review', $this->decision()['selection_status']);
         self::assertSame(0, $provider->calls);
@@ -111,6 +115,7 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         $service = $c->get(SelectionService::class);
         $service->saveRules($ctx, $source, SelectionRules::fromInput([]));
         $service->saveSemantic($ctx, $source, new SemanticSettings(true, 'AI технологии; исключать рекламу; неясные события', 70, 0.8, 'review'));
+        $this->drainSemantic();
         $this->ingest($source, [$this->message(10, 'AI', '777'), $this->message(11, 'технологии', '777')]);
         self::assertSame('approved', $this->decision()['selection_status']);
         self::assertSame(1, $this->db->table('source_items')->count());
@@ -141,6 +146,7 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         $service = $c->get(SelectionService::class);
         $service->saveRules($ctx, $source, SelectionRules::fromInput([]));
         $service->saveSemantic($ctx, $source, new SemanticSettings(true, 'AI', 70, 0.8, 'review'));
+        $this->drainSemantic();
         $this->ingest($source, [$this->message(10, 'PRIVATE MATERIAL')]);
         self::assertSame('needs_review', $this->decision()['selection_status']);
         $row = $this->db->table('semantic_selection_evaluations')->first() ?? throw new \LogicException('No history');
@@ -155,9 +161,11 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         $ctx = $this->contextFor($ws, $owner);
         $c = $this->app->container();
         $c->get(ContentDiscovery::class)->refresh($ctx);
+        $this->drainSemantic();
         $before = $this->db->select('SELECT id, trend_score, score_json FROM discovery_clusters ORDER BY id');
         $selection = $c->get(SelectionService::class);
         $selection->saveSemantic($ctx, null, new SemanticSettings(true, 'телескоп AI technology', 70, 0.8, 'review'));
+        $this->drainSemantic();
         $clusters = $c->get(DiscoveryRepository::class)->clusters($ctx, 'new', 'semantic');
         self::assertSame(90, $clusters[0]['semantic_score']);
         self::assertSame(4, $this->db->table('semantic_selection_evaluations')->count());
@@ -173,9 +181,11 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         self::assertSame('completed', $c->get(ContentProcessor::class)->process($ctx, null, $id, $revision, TextSettings::fromInput([])));
         $gateway->decide($ctx, $id, false);
         $selection->saveSemantic($ctx, null, new SemanticSettings(true, 'телескоп AI technology', 0, 0, 'review'));
+        $this->drainSemantic();
         self::assertSame('rejected', $this->decision()['selection_status']);
         self::assertSame('manual', $this->decision()['decision_mode']);
         $selection->saveSemantic($ctx, null, SemanticSettings::fromInput([]));
+        $this->drainSemantic();
         self::assertNull($c->get(DiscoveryRepository::class)->clusters($ctx, 'imported')[0]['semantic_score']);
         self::assertSame(0, $this->db->table('sources')->count());
         self::assertSame(0, $this->db->table('posts')->count());
@@ -197,6 +207,7 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         }
         $this->actAs($owner);
         self::assertSame(302, $this->post($url . '/semantic-settings', $settings)->status);
+        $this->drainSemantic();
         $page = $this->get($url . '/items/' . $item['public_id']);
         self::assertSame(200, $page->status);
         foreach (['Детерминированное решение', 'Смысловое решение', 'Semantic score', 'Confidence', 'Итоговое решение'] as $label) {
@@ -209,6 +220,7 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         self::assertSame(302, $this->post($url . '/semantic-settings', array_replace($settings, ['min_confidence' => '2']))->status);
         self::assertStringContainsString('Уверенность — число 0–1.', $this->get($url)->body);
         $c->get(ContentDiscovery::class)->refresh($ctx);
+        $this->drainSemantic();
         self::assertSame(302, $this->post($base . '/radar/semantic-settings', $settings)->status);
         self::assertStringContainsString('Semantic relevance', $this->get($base . '/radar?ranking=semantic')->body);
         self::assertSame(422, $this->get($base . '/radar?ranking=invalid')->status);
@@ -236,6 +248,7 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         $service = $c->get(SelectionService::class);
         $service->saveRules($ctx, $source, SelectionRules::fromInput(['exclude_keywords' => 'AI']));
         $service->saveSemantic($ctx, $source, new SemanticSettings(true, 'AI', 70, 0.8, 'review'));
+        $this->drainSemantic();
         $this->ingest($source, [$this->message(10, 'AI')]);
         $item = $this->db->table('source_items')->first() ?? throw new \LogicException('No item');
         $service->saveRules($ctx, $source, SelectionRules::fromInput([]));
@@ -256,12 +269,15 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         $c = $this->app->container();
         $selection = $c->get(SelectionService::class);
         $c->get(ContentDiscovery::class)->refresh($ctx);
+        $this->drainSemantic();
         $selection->saveSemantic($ctx, null, new SemanticSettings(true, 'телескоп advertisement', 70, 0.8, 'review'));
+        $this->drainSemantic();
         $candidate = $c->get(DiscoveryRepository::class)->clusters($ctx)[0]['items'][0];
         $semantic = $c->get(SemanticSelection::class);
         self::assertCount(1, $semantic->history($ws->id, 'discovery', (int) $candidate['id']));
         $this->db->execute('UPDATE discovery_items SET excerpt = ? WHERE workspace_id = ? AND id = ?', ['advertisement', $ws->id, $candidate['id']]);
         $c->get(ContentDiscovery::class)->refresh($ctx);
+        $this->drainSemantic();
         $history = $semantic->history($ws->id, 'discovery', (int) $candidate['id']);
         self::assertCount(2, $history);
         self::assertSame('rejected', $history[0]['decision']);
@@ -273,6 +289,7 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         self::assertFalse($semantic->settings($ws->id, $source->id)['settings']->enabled);
         try {
             $selection->saveSemantic($this->contextFor($otherWs, $otherOwner), $source, new SemanticSettings(true, 'AI', 70, 0.8, 'review'));
+            $this->drainSemantic();
             self::fail('Foreign Source settings changed');
         } catch (HttpException $e) {
             self::assertSame(404, $e->status);
@@ -293,6 +310,7 @@ final class SemanticSelectionFlowTest extends SourceSelectionTestCase
         $service = $c->get(SelectionService::class);
         $service->saveRules($ctx, $source, SelectionRules::fromInput([]));
         $service->saveSemantic($ctx, $source, new SemanticSettings(true, 'AI', 70, 0.8, 'review'));
+        $this->drainSemantic();
         $this->ingest($source, [$this->message(10, 'AI')]);
         $migration = require TestEnv::basePath() . '/database/migrations/2026_10_06_000027_create_semantic_selection.php';
         $providers = require TestEnv::basePath() . '/database/migrations/2026_10_06_000029_add_content_provider_metadata.php';

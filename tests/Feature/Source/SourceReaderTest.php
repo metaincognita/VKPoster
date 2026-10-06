@@ -64,7 +64,7 @@ final class SourceReaderTest extends WorkspaceTestCase
         $on = $service->create($context, 'Enabled', 'telegram', '@sample_channel', true);
         $off = $service->create($context, 'Disabled', 'telegram', '@other_channel');
         self::assertSame(403, $this->api(secret: 'wrong')->status);
-        self::assertSame(['version' => 1, 'sources' => [['id' => $on->publicId, 'username' => 'sample_channel']]], json_decode($this->api()->body, true));
+        self::assertSame(['version' => 1, 'sources' => [['id' => $on->publicId, 'username' => 'sample_channel', 'connection_version' => 1]]], json_decode($this->api()->body, true));
         self::assertSame(409, $this->api($this->event($off, [$this->message(1)]))->status);
         self::assertSame(0, $this->db->table('source_events')->count());
         $this->app->container()->instance(Config::class, TestEnv::config());
@@ -190,6 +190,7 @@ final class SourceReaderTest extends WorkspaceTestCase
             $origins->up($this->db);
             $providers->up($this->db);
             $automation->up($this->db);
+            (require TestEnv::basePath() . '/database/migrations/2026_10_07_000032_review_fixes.php')->up($this->db);
             (new Migrator($this->db, TestEnv::basePath() . '/database/migrations'))->migrate();
         }
     }

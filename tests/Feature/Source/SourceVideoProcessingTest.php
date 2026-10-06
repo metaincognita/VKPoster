@@ -85,6 +85,7 @@ final class SourceVideoProcessingTest extends SourceSelectionTestCase
         $c = $this->app->container();
         $c->instance(MediaStorage::class, new ArrayMediaStorage());
         $this->ingest($source, [$this->message(10, 'Original photo', null, ['media' => ['kind' => 'photo', 'telegram_id' => '1010', 'selected' => ['type' => 'w', 'width' => 640, 'height' => 640, 'bytes' => 10000]]])]);
+        $c->get(SelectionService::class)->decide($ctx, $source, (string) $item['public_id'], true);
         $item = $c->get(MaterialRepository::class)->item($ctx, $source, (string) $item['public_id']);
         $revision = MaterialRepository::revision($item, $c->get(MaterialRepository::class)->messages($ctx, $source, (int) $item['id']));
         $c->get(ContentProcessor::class)->process($ctx, $source, (string) $item['public_id'], $revision, TextSettings::fromInput(['mode' => 'rewrite']));
@@ -165,6 +166,7 @@ final class SourceVideoProcessingTest extends SourceSelectionTestCase
         });
         /** @var VideoWorkflow $workflow */
         $workflow = $c->make(VideoWorkflow::class);
+        $c->get(SelectionService::class)->decide($ctx, $source, $itemId, true);
         $item = $c->get(MaterialRepository::class)->item($ctx, $source, $itemId);
         $revision = MaterialRepository::revision($item, $c->get(MaterialRepository::class)->messages($ctx, $source, (int) $item['id']));
         $id = $workflow->request($ctx, $source, $itemId, $revision, VideoSettings::fromInput([]));

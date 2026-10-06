@@ -19,13 +19,19 @@ final class ContentOriginGuard
     /** Safe user-facing failure, or null when an ordinary/approved current post can proceed. */
     public function problem(Post $post): ?string
     {
-        $origin = $this->db->select('SELECT o.*, i.text, i.content_type, i.peer_id, i.grouped_id, i.source_id, i.id AS material_id FROM content_post_origins o LEFT JOIN source_items i ON i.id = o.item_id AND i.workspace_id = o.workspace_id WHERE o.workspace_id = ? AND o.post_id = ?', [$post->workspaceId, $post->id])[0] ?? null;
+        $origin = $this->db->select('SELECT o.*, i.text, i.content_type, i.peer_id, i.grouped_id, i.source_id, i.connection_version, i.id AS material_id FROM content_post_origins o LEFT JOIN source_items i ON i.id = o.item_id AND i.workspace_id = o.workspace_id WHERE o.workspace_id = ? AND o.post_id = ?', [$post->workspaceId, $post->id])[0] ?? null;
         if ($origin === null) {
             return null;
         }
         $error = 'Исходный материал или решение отбора изменились. Создайте черновик из актуального принятого материала.';
         if ($origin['material_id'] === null || $origin['text_processing_id'] === null) {
             return $error;
+        }
+        if ($origin['source_id'] !== null) {
+            $source = $this->db->select('SELECT connection_version FROM sources WHERE workspace_id=? AND id=?', [$post->workspaceId, $origin['source_id']])[0] ?? null;
+            if ($source === null || (int) $source['connection_version'] !== (int) $origin['connection_version']) {
+                return $error;
+            }
         }
         $bindings = [$post->workspaceId, $origin['source_id'], $origin['item_id']];
         $messages = $this->db->select('SELECT message_id, text, entities_json, media_json, metadata_json, published_at, edited_at, revision_hash FROM source_messages WHERE workspace_id = ? AND source_id <=> ? AND item_id = ? ORDER BY message_id', $bindings);

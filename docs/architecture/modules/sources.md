@@ -144,3 +144,8 @@ Existing processing/selection interfaces now have opt-in real HTTP adapters, pre
 ## Automation 3.3
 
 Optional per-Source/Radar policies enqueue the existing Queue through Schedule once a minute; checkpoints and stale/cost guards coordinate existing processing and ContentDraftService. No automatic publishing. [Details and recovery](content-automation.md).
+
+
+## Review fixes: Telegram connection identity
+
+Migration 32 adds a monotonically increasing `connection_version` to Source and records it on imported items. Changing normalized username increments the generation under a row lock. Reader snapshots carry that generation; stale durable envelopes are quarantined without changing their original payload. Ingress rejects obsolete bindings before writing an event. Current material listings, processing and Draft publication guards require the current connection generation; prior items remain stored for history. Reader photo delivery filters available readers before a bounded per-Source round-robin query, preventing an unavailable Source from occupying the whole batch.

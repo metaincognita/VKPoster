@@ -23,6 +23,7 @@ final class Source
         public readonly bool $enabled,
         public readonly DateTimeImmutable $createdAt,
         public readonly DateTimeImmutable $updatedAt,
+        public readonly int $connectionVersion = 1,
     ) {
     }
 

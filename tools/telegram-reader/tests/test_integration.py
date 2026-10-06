@@ -154,6 +154,34 @@ class OutboxTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(transports[0].entity)
         self.assertEqual(set(worker.readers), {"b"})
 
+    async def test_outbox_keeps_old_binding_identity_after_retarget(self):
+        box = Outbox(self.store)
+        self.store.set("binding:source", 1)
+        first = box.enqueue(
+            "source", "status", {"status": "connected", "peer_id": "123"}
+        )
+        self.store.set("binding:source", 2)
+        second = box.enqueue(
+            "source", "status", {"status": "connected", "peer_id": "456"}
+        )
+        rows = self.store.db.execute(
+            "SELECT payload FROM outbox WHERE event_id IN (?,?) ORDER BY rowid",
+            (first, second),
+        ).fetchall()
+        events = [json.loads(row[0]) for row in rows]
+        self.assertEqual([event["connection_version"] for event in events], [1, 2])
+        self.assertNotEqual(first, second)
+        api = SimpleNamespace(send=AsyncMock())
+        self.assertEqual(await box.deliver(api, {"source"}), 1)
+        api.send.assert_awaited_once()
+        self.assertEqual(api.send.call_args.args[0]["connection_version"], 2)
+        self.assertEqual(
+            self.store.db.execute(
+                "SELECT error FROM outbox WHERE event_id=?", (first,)
+            ).fetchone()[0],
+            "obsolete_source_binding",
+        )
+
 
 class HTTPTests(unittest.IsolatedAsyncioTestCase):
     async def test_actual_http_secret_ack_validation_and_retry(self):

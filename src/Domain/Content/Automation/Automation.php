@@ -202,7 +202,7 @@ final class Automation
         $item = $this->db->table('source_items')->where('workspace_id', '=', $ctx->workspaceId)->where('id', '=', $run['item_id'])->first() ?? throw new HttpException(404, 'Not found');
         $itemId = (string) $item['public_id'];
         $revision = MaterialRepository::revision($item, $this->materials->messages($ctx, $source, (int) $item['id']));
-        if ($revision !== $run['revision_hash']) {
+        if (($source !== null && (int) $item['connection_version'] !== $source->connectionVersion) || $revision !== $run['revision_hash']) {
             $this->finish($run, 'stale', 'Материал изменился.');
             return;
         }
@@ -249,11 +249,14 @@ final class Automation
                     return;
                 }
                 $row = $this->db->select('SELECT * FROM source_text_processings WHERE workspace_id=? AND item_id=? AND revision_hash=? AND selection_hash=? AND mode=? ORDER BY id DESC LIMIT 1', [$ctx->workspaceId, $item['id'], $revision, $hash, $settings['text_mode']])[0] ?? null;
-                if ($row === null && $run['step'] !== 'text_started') {
+                if (($row === null && $run['step'] !== 'text_started') || ($row !== null && (bool) $row['retryable'])) {
                     $this->checkpoint($run, 'text_started', 'selection');
                     $this->assertCurrent($ctx, $source, $run);
                     $this->text->process($ctx, $source, $itemId, $revision, TextSettings::fromInput(['mode' => $settings['text_mode']]));
                     $row = $this->db->select('SELECT * FROM source_text_processings WHERE workspace_id=? AND item_id=? AND revision_hash=? AND selection_hash=? AND mode=? ORDER BY id DESC LIMIT 1', [$ctx->workspaceId, $item['id'], $revision, $hash, $settings['text_mode']])[0] ?? null;
+                }
+                if ($row !== null && (bool) $row['retryable']) {
+                    throw new \App\Integrations\ContentProviders\ProviderException((string) $row['error_category'], true);
                 }
                 if (($row['status'] ?? '') !== 'completed') {
                     $this->finish($run, 'needs_review', 'Обработка текста не подтверждена. Проверьте историю перед повторным вызовом.');

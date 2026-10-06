@@ -55,7 +55,10 @@ final class ProviderHttp
                     }
                 }
                 $response = $this->http->request($method, $url, array_merge($options, ['timeout' => 20, 'connect_timeout' => 5, 'follow_redirects' => false, 'stream' => true]));
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
+                if ($e instanceof \GuzzleHttp\Exception\ConnectTimeoutException) {
+                    throw new ProviderException('pre_dispatch_timeout', true);
+                }
                 if ($method === 'GET' && $attempt < 2) {
                     ($this->sleep)(250000 * (2 ** $attempt));
                     continue;

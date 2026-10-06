@@ -119,7 +119,8 @@ final class VideoWorkflow
                     $row['status'] = 'failed';
                     return $row;
                 }
-                $this->db->execute('UPDATE source_video_generations SET poll_claimed_at = ? WHERE workspace_id = ? AND public_id = ?', [DbTime::format($this->clock->now()), $ctx->workspaceId, $jobId]);
+                $this->db->execute('UPDATE source_video_generations SET poll_claimed_at = ?, lease_generation = lease_generation + 1 WHERE workspace_id = ? AND public_id = ?', [DbTime::format($this->clock->now()), $ctx->workspaceId, $jobId]);
+                $row['lease_generation'] = (int) $row['lease_generation'] + 1;
                 $row['polling'] = true;
                 $row['claimed'] = true;
                 return $row;
@@ -138,8 +139,9 @@ final class VideoWorkflow
                 return $row;
             }
             $now = DbTime::format($this->clock->now());
-            $this->db->execute('UPDATE source_video_generations SET status = ?, started_at = ?, updated_at = ? WHERE workspace_id = ? AND public_id = ?', ['processing', $now, $now, $ctx->workspaceId, $jobId]);
+            $this->db->execute('UPDATE source_video_generations SET status = ?, started_at = ?, updated_at = ?, lease_generation = lease_generation + 1 WHERE workspace_id = ? AND public_id = ?', ['processing', $now, $now, $ctx->workspaceId, $jobId]);
             $this->audit->record('source.video_started', $ctx->userId, 'source_item', $itemId, [], $ctx->workspaceId);
+            $row['lease_generation'] = (int) $row['lease_generation'] + 1;
             $row['claimed'] = true;
             return $row;
         });
@@ -158,12 +160,12 @@ final class VideoWorkflow
                     if (preg_match('/^[a-z0-9]{1,64}$/D', $remoteId) !== 1) {
                         throw new \RuntimeException('Invalid provider job ID');
                     }
-                    $this->db->execute('UPDATE source_video_generations SET provider_job_id = ?, provider_metadata_json = ? WHERE workspace_id = ? AND source_id = ? AND public_id = ? AND status = ?', [$remoteId, json_encode($this->providerMetadata(), JSON_THROW_ON_ERROR), $ctx->workspaceId, $source->id, $jobId, 'processing']);
+                    $this->db->execute('UPDATE source_video_generations SET provider_job_id = ?, provider_metadata_json = ? WHERE workspace_id = ? AND source_id = ? AND public_id = ? AND status = ? AND lease_generation = ?', [$remoteId, json_encode($this->providerMetadata(), JSON_THROW_ON_ERROR), $ctx->workspaceId, $source->id, $jobId, 'processing', (int) $attempt['lease_generation']]);
                     return 'processing';
                 }
                 $output = $this->provider->poll((string) $attempt['provider_job_id'], $jobId);
                 if ($output === null) {
-                    $this->releasePoll($ctx, $jobId);
+                    $this->releasePoll($ctx, $jobId, (int) $attempt['lease_generation']);
                     return 'processing';
                 }
                 $result = $output->snapshot();
@@ -172,8 +174,12 @@ final class VideoWorkflow
             }
         } catch (\App\Integrations\ContentProviders\ProviderException $e) {
             if (isset($attempt['polling']) && $e->retryable) {
-                $this->releasePoll($ctx, $jobId);
+                $this->releasePoll($ctx, $jobId, (int) $attempt['lease_generation']);
                 return 'processing';
+            }
+            if ($e->retryable) {
+                $this->db->execute("UPDATE source_video_generations SET status='pending', started_at=NULL, error_category=? WHERE workspace_id=? AND public_id=? AND status='processing' AND lease_generation=?", [$e->category, $ctx->workspaceId, $jobId, (int) $attempt['lease_generation']]);
+                throw $e; // Known rejection before execution: same local job may retry safely.
             }
             $error = 'Генерация не удалась. Проверьте задание у провайдера перед повторной попыткой.';
         } catch (Throwable) {
@@ -186,7 +192,7 @@ final class VideoWorkflow
                 $result = null;
                 $error = 'Материал, решение отбора или основа изменились. Создайте новое задание.';
             }
-            return $this->finish($ctx, $source, $itemId, $jobId, $result, $error, $metadata);
+            return $this->finish($ctx, $source, $itemId, $jobId, $result, $error, $metadata, (int) $attempt['lease_generation']);
         });
     }
 
@@ -223,17 +229,21 @@ final class VideoWorkflow
     {
         return $this->provider instanceof \App\Integrations\ContentProviders\ProviderMetadata ? $this->provider->metadata() : [];
     }
-    private function releasePoll(WorkspaceContext $ctx, string $jobId): void
+    private function releasePoll(WorkspaceContext $ctx, string $jobId, int $generation): void
     {
-        $this->db->execute('UPDATE source_video_generations SET poll_claimed_at = NULL, provider_metadata_json = ?, updated_at = ? WHERE workspace_id = ? AND public_id = ? AND status = ?', [json_encode($this->providerMetadata(), JSON_THROW_ON_ERROR), DbTime::format($this->clock->now()), $ctx->workspaceId, $jobId, 'processing']);
+        $this->db->execute('UPDATE source_video_generations SET poll_claimed_at = NULL, provider_metadata_json = ?, updated_at = ? WHERE workspace_id = ? AND public_id = ? AND status = ? AND lease_generation = ?', [json_encode($this->providerMetadata(), JSON_THROW_ON_ERROR), DbTime::format($this->clock->now()), $ctx->workspaceId, $jobId, 'processing', $generation]);
     }
 
     /**
      * @param array<string,mixed>|null $result
      * @param array<string,mixed> $metadata
      */
-    private function finish(WorkspaceContext $ctx, Source $source, string $itemId, string $jobId, ?array $result, ?string $error, array $metadata = []): string
+    private function finish(WorkspaceContext $ctx, Source $source, string $itemId, string $jobId, ?array $result, ?string $error, array $metadata = [], ?int $generation = null): string
     {
+        $fresh = $this->db->select('SELECT status, lease_generation FROM source_video_generations WHERE workspace_id=? AND public_id=? FOR UPDATE', [$ctx->workspaceId, $jobId])[0];
+        if ($generation !== null && ($fresh['status'] !== 'processing' || (int) $fresh['lease_generation'] !== $generation)) {
+            return (string) $fresh['status'];
+        }
         $status = $error === null ? 'completed' : 'failed';
         $now = DbTime::format($this->clock->now());
         $this->db->execute('UPDATE source_video_generations SET provider_metadata_json = ?, poll_claimed_at = NULL, status = ?, result_json = ?, error = ?, finished_at = ?, updated_at = ? WHERE workspace_id = ? AND source_id = ? AND public_id = ?', [json_encode($metadata, JSON_THROW_ON_ERROR), $status, $result === null ? null : json_encode($result, JSON_THROW_ON_ERROR), $error, $now, $now, $ctx->workspaceId, $source->id, $jobId]);

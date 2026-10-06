@@ -81,6 +81,10 @@ final class ImageWorkflow
     /** @param array<string,mixed> $item */
     public function current(WorkspaceContext $context, Source $source, array $item, string $revision, ?string $selectionHash): bool
     {
+        $binding = $this->db->select('SELECT connection_version FROM sources WHERE workspace_id=? AND id=?', [$context->workspaceId, $source->id])[0] ?? null;
+        if ($binding === null || (int) $binding['connection_version'] !== $source->connectionVersion || (int) $item['connection_version'] !== $source->connectionVersion) {
+            return false;
+        }
         $selection = $this->materials->selection($context, $source, (int) $item['id']);
         return ($selection['selection_status'] ?? '') === 'approved' && hash_equals($revision, MaterialRepository::revision($item, $this->materials->messages($context, $source, (int) $item['id']))) && ($selectionHash === null || hash_equals($selectionHash, MaterialRepository::selectionHash($selection)));
     }
@@ -88,10 +92,22 @@ final class ImageWorkflow
     /** Pre-context service boundary: only enabled, current approved jobs, globally bounded and free of private credentials.
      * @return list<array<string,mixed>>
      */
-    public function jobs(): array
+    /** @param list<string>|null $availableSources
+     * @return list<array<string,mixed>> */
+    public function jobs(?array $availableSources = null): array
     {
         $jobs = [];
-        foreach ($this->db->select("SELECT p.*, s.public_id AS source_public_id FROM source_image_processings p JOIN sources s ON s.id = p.source_id AND s.workspace_id = p.workspace_id WHERE s.enabled = 1 AND p.status = 'queued' ORDER BY p.id LIMIT 100") as $row) {
+        if ($availableSources === []) {
+            return [];
+        }
+        $bindings = $availableSources ?? [];
+        foreach ($bindings as $id) {
+            if (!Ulid::isValid($id)) {
+                throw new HttpException(422, 'Invalid reader source');
+            }
+        }
+        $filter = $availableSources === null ? '' : ' AND s.public_id IN (' . implode(',', array_fill(0, count($bindings), '?')) . ')';
+        foreach ($this->db->select("SELECT * FROM (SELECT p.*, s.public_id AS source_public_id, ROW_NUMBER() OVER (PARTITION BY p.source_id ORDER BY p.id) AS fair_rank FROM source_image_processings p JOIN sources s ON s.id=p.source_id AND s.workspace_id=p.workspace_id WHERE s.enabled=1 AND p.status='queued'" . $filter . ') ranked ORDER BY fair_rank, id LIMIT 100', $bindings) as $row) {
             [$ctx, $source, $item] = $this->scope($row);
             if (!$this->current($ctx, $source, $item, (string) $row['revision_hash'], (string) $row['selection_hash'])) {
                 $this->finish($row, 'stale', 'Материал или решение отбора изменились.');

@@ -18,7 +18,7 @@ final class MaterialRepository extends WorkspaceScopedRepository
         if ($source === null) {
             return $this->db->select('SELECT i.* FROM source_items i JOIN discovery_imports l ON l.material_id = i.id AND l.workspace_id = i.workspace_id WHERE i.workspace_id = ? AND i.public_id = ? AND i.source_id IS NULL', [$context->workspaceId, $publicId])[0] ?? throw new HttpException(404, 'Not found');
         }
-        return $this->scoped($context, 'source_items')->where('source_id', '=', $source->id)->where('public_id', '=', $publicId)->first() ?? throw new HttpException(404, 'Not found');
+        return $this->db->select('SELECT i.* FROM source_items i JOIN sources s ON s.id=i.source_id AND s.workspace_id=i.workspace_id AND s.connection_version=i.connection_version WHERE i.workspace_id=? AND i.source_id=? AND i.public_id=? AND s.connection_version=?', [$context->workspaceId, $source->id, $publicId, $source->connectionVersion])[0] ?? throw new HttpException(404, 'Not found');
     }
 
     /** @return list<array<string, mixed>> */
@@ -51,6 +51,7 @@ final class MaterialRepository extends WorkspaceScopedRepository
     /** @param array<string, mixed>|null $selection */
     public static function selectionHash(?array $selection): string
     {
-        return hash('sha256', json_encode($selection, JSON_THROW_ON_ERROR));
+        $identity = $selection === null ? null : array_intersect_key($selection, array_flip(['selection_status', 'decision_mode', 'reason', 'matched_rule', 'rules_version', 'rules_snapshot_json', 'revision_hash']));
+        return hash('sha256', json_encode($identity, JSON_THROW_ON_ERROR));
     }
 }

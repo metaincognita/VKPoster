@@ -18,6 +18,9 @@ final class SourceEventContract
             || !is_string($event['source_id'] ?? null) || preg_match('/\A[0-9A-Z]{26}\z/', $event['source_id']) !== 1) {
             throw new HttpException(422, 'Invalid event envelope');
         }
+        if (isset($event['connection_version']) && (!is_int($event['connection_version']) || $event['connection_version'] < 1)) {
+            throw new HttpException(422, 'Invalid source connection');
+        }
         $payload = $event['payload'] ?? null;
         if (!is_array($payload) || strlen(json_encode($event, JSON_THROW_ON_ERROR)) > 524288 || $this->containsSecret($event)) {
             throw new HttpException(422, 'Invalid payload');

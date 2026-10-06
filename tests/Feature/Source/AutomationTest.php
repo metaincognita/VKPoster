@@ -189,6 +189,7 @@ final class AutomationTest extends SourceSelectionTestCase
         $this->tick();
         self::assertSame('rejected', $this->runRow()['status']);
         self::assertGreaterThan(0, $this->db->table('semantic_selection_evaluations')->count());
+        $this->tick(); // Queued semantic completion resumes automation on the next scheduler tick.
         self::assertSame(1, $this->db->table('posts')->count());
     }
     public function testAutomationSettingsUiPersistsAndIsTenantPermissionAndCsrfGuarded(): void
@@ -356,6 +357,33 @@ final class AutomationTest extends SourceSelectionTestCase
         self::assertSame(1, $this->db->table('discovery_imports')->count());
         $row = $this->db->select('SELECT d.source_type FROM discovery_imports l JOIN discovery_items d ON d.id=l.discovery_item_id AND d.workspace_id=l.workspace_id')[0];
         self::assertSame('web', $row['source_type']);
+    }
+
+    public function testText429BackoffRetriesWithoutManualReviewAndCreatesOneDraft(): void
+    {
+        $calls = 0;
+        $provider = $this->createMock(\App\Integrations\Ai\TextProvider::class);
+        $provider->method('name')->willReturn('fake');
+        $provider->expects(self::exactly(2))->method('generate')->willReturnCallback(static function (string $text) use (&$calls): string {
+            if (++$calls === 1) {
+                throw new \App\Integrations\ContentProviders\ProviderException('rate_limited', true);
+            }
+            return $text;
+        });
+        $this->app->container()->instance(\App\Integrations\Ai\TextProvider::class, $provider);
+        $this->fixture(['text_mode' => 'rewrite']);
+        $this->tick();
+        self::assertSame('pending', $this->runRow()['status']);
+        self::assertSame(1, $calls);
+        $failed = $this->db->table('source_text_processings')->first() ?? throw new \LogicException('Missing regression row');
+        self::assertTrue((bool) $failed['retryable']);
+        self::assertSame('rate_limited', $failed['error_category']);
+        $this->tick();
+        self::assertSame(1, $calls, 'Backoff prevents an immediate paid retry');
+        $this->clock->advance(61);
+        $this->tick();
+        self::assertSame('completed', $this->runRow()['status']);
+        self::assertSame(1, $this->db->table('content_post_origins')->count());
     }
 
 }

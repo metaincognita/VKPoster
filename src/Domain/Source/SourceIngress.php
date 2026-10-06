@@ -20,19 +20,22 @@ final class SourceIngress
     /** @return list<array<string, mixed>> Enabled Telegram configurations only; no workspace credentials. */
     public function enabled(): array
     {
-        return $this->db->select("SELECT public_id AS id, telegram_username AS username FROM sources WHERE enabled = 1 AND type = 'telegram' ORDER BY id");
+        return $this->db->select("SELECT public_id AS id, telegram_username AS username, connection_version FROM sources WHERE enabled = 1 AND type = 'telegram' ORDER BY id");
     }
 
     /** @param array<string, mixed> $event Returns only after commit; retries with the same event id are safe. */
     public function accept(array $event): bool
     {
         $this->contract->validate($event);
-        /** @var array{source_id: string, event_id: string, kind: string, payload: array<string, mixed>} $event */
+        /** @var array{connection_version?: int, source_id: string, event_id: string, kind: string, payload: array<string, mixed>} $event */
         $encoded = json_encode($event, JSON_THROW_ON_ERROR);
         return $this->db->transaction(function () use ($event, $encoded): bool {
             $rows = $this->db->select('SELECT * FROM sources WHERE public_id = ? FOR UPDATE', [$event['source_id']]);
             $source = $rows[0] ?? throw new HttpException(404, 'Source not found');
             $id = (int) $source['id'];
+            if (($event['connection_version'] ?? 1) !== (int) $source['connection_version']) {
+                throw new HttpException(422, 'Obsolete source connection');
+            }
             $prior = $this->db->select('SELECT payload_hash FROM source_events WHERE source_id = ? AND event_id = ?', [$id, $event['event_id']]);
             $hash = hash('sha256', $encoded);
             if ($prior !== []) {
@@ -73,9 +76,9 @@ final class SourceIngress
         $workspaceId = (int) $source['workspace_id'];
         $peer = $payload['peer_id'];
         $this->db->execute(
-            "INSERT INTO source_items (public_id, workspace_id, source_id, peer_id, item_key, grouped_id, text, content_type, published_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)",
-            [(string) new Ulid(), $workspaceId, $sourceId, $peer, $key, $payload['grouped_id'], $payload['grouped_id'] === null ? 'text' : 'album', $this->contract->date($messages[0]['date']), $now, $now]
+            "INSERT INTO source_items (public_id, workspace_id, source_id, peer_id, item_key, grouped_id, text, content_type, published_at, created_at, updated_at, connection_version)
+            VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)",
+            [(string) new Ulid(), $workspaceId, $sourceId, $peer, $key, $payload['grouped_id'], $payload['grouped_id'] === null ? 'text' : 'album', $this->contract->date($messages[0]['date']), $now, $now, (int) $source['connection_version']]
         );
         $itemId = (int) $this->db->lastInsertId();
         foreach ($messages as $message) {

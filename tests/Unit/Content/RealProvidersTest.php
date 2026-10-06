@@ -459,4 +459,20 @@ final class RealProvidersTest extends TestCase
         $http->assertAllConsumed();
     }
 
+    public function testPreDispatchConnectTimeoutIsRetryableButReadTimeoutIsAmbiguous(): void
+    {
+        foreach ([true, false] as $beforeDispatch) {
+            $http = $this->createMock(\App\Kernel\HttpClient\HttpClientInterface::class);
+            $request = new \GuzzleHttp\Psr7\Request('POST', 'https://api.openai.com/v1/responses');
+            $exception = $beforeDispatch ? new \GuzzleHttp\Exception\ConnectTimeoutException('synthetic timeout', $request) : new \GuzzleHttp\Exception\NetworkTimeoutException('synthetic timeout', $request);
+            $http->expects(self::once())->method('request')->willThrowException($exception);
+            try {
+                (new ProviderHttp($http))->json('POST', 'https://api.openai.com/v1/responses', []);
+                self::fail('Timeout must not produce a result');
+            } catch (ProviderException $e) {
+                self::assertSame($beforeDispatch, $e->retryable);
+            }
+        }
+    }
+
 }

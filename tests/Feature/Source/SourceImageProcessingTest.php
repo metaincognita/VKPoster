@@ -111,10 +111,10 @@ final class SourceImageProcessingTest extends SourceSelectionTestCase
         self::assertNotSame($variants[0]['storage_key'], $variants[3]['storage_key']);
         self::assertSame($variants[0]['sha256'], $variants[3]['sha256']);
         $this->post($url . '/select', ['variant' => $variants[2]['public_id']]);
-        self::assertSame($variants[0]['public_id'], $this->db->table('source_image_processings')->first()['selected_variant'] ?? null);
+        self::assertSame($variants[0]['public_id'], ($this->db->table('source_image_processings')->first() ?? throw new \LogicException('Missing regression row'))['selected_variant'] ?? null);
         foreach ([$variants[1], $variants[3], $variants[0]] as $variant) {
             $this->post($url . '/select', ['variant' => $variant['public_id']]);
-            self::assertSame($variant['public_id'], $this->db->table('source_image_processings')->first()['selected_variant'] ?? null);
+            self::assertSame($variant['public_id'], ($this->db->table('source_image_processings')->first() ?? throw new \LogicException('Missing regression row'))['selected_variant'] ?? null);
         }
         $page = $this->get($url);
         self::assertSame(200, $page->status);
@@ -130,7 +130,7 @@ final class SourceImageProcessingTest extends SourceSelectionTestCase
         fclose($preview->stream);
         $this->app->container()->get(SelectionService::class)->decide($ctx, $source, $item['public_id'], false);
         $this->post($url . '/select', ['variant' => $variants[1]['public_id']]);
-        self::assertSame($variants[0]['public_id'], $this->db->table('source_image_processings')->first()['selected_variant'] ?? null);
+        self::assertSame($variants[0]['public_id'], ($this->db->table('source_image_processings')->first() ?? throw new \LogicException('Missing regression row'))['selected_variant'] ?? null);
         self::assertStringContainsString('Эта попытка недоступна для выбора', $this->get($url)->body);
         self::assertSame(0, $this->db->table('posts')->count());
         self::assertSame(0, $this->db->table('source_text_processings')->count());
@@ -242,7 +242,7 @@ final class SourceImageProcessingTest extends SourceSelectionTestCase
         $job = $workflow->jobs()[0];
         self::assertSame(503, $this->api($this->payload($job))->status);
         self::assertSame(0, $this->db->table('source_image_variants')->count());
-        self::assertSame('queued', $this->db->table('source_image_processings')->first()['status'] ?? null);
+        self::assertSame('queued', ($this->db->table('source_image_processings')->first() ?? throw new \LogicException('Missing regression row'))['status'] ?? null);
         $fail['enabled'] = false;
         self::assertSame(200, $this->api($this->payload($job))->status);
         self::assertSame(4, $this->db->table('source_image_variants')->count());
@@ -279,4 +279,30 @@ final class SourceImageProcessingTest extends SourceSelectionTestCase
         $automation->up($this->db);
         self::assertSame(0, $this->db->table('source_image_variants')->count());
     }
+    public function testUnavailableOldSourceCannotStarveAvailablePhotoJobs(): void
+    {
+        [$old, $ctx, $item, $revision] = $this->fixture();
+        $c = $this->app->container();
+        $workflow = $c->get(ImageWorkflow::class);
+        $c->get(SelectionService::class)->decide($ctx, $old, (string) $item['public_id'], true);
+        $workflow->request($ctx, $old, (string) $item['public_id'], $revision);
+        $base = $this->db->table('source_image_processings')->first() ?? throw new \LogicException('Missing regression row');
+        unset($base['id']);
+        for ($i = 0; $i < 100; ++$i) {
+            $base['public_id'] = (string) new \Symfony\Component\Uid\Ulid();
+            $this->db->table('source_image_processings')->insert($base);
+        }
+        $available = $c->get(SourceService::class)->create($ctx, 'Available', 'telegram', '@available_channel', true);
+        $this->ingest($available, [$this->message(20, extra: ['media' => ['kind' => 'photo', 'telegram_id' => '2020']])]);
+        $other = $this->db->table('source_items')->where('source_id', '=', $available->id)->first() ?? throw new \LogicException('Missing regression row');
+        $c->get(SelectionService::class)->decide($ctx, $available, (string) $other['public_id'], true);
+        $current = MaterialRepository::revision($other, $c->get(MaterialRepository::class)->messages($ctx, $available, (int) $other['id']));
+        $workflow->request($ctx, $available, (string) $other['public_id'], $current);
+        $jobs = $workflow->jobs([$available->publicId]);
+        self::assertCount(1, $jobs);
+        self::assertSame($available->publicId, $jobs[0]['source_id']);
+        self::assertContains($available->publicId, array_column($workflow->jobs(), 'source_id'));
+        self::assertSame([], $workflow->jobs([]));
+    }
+
 }

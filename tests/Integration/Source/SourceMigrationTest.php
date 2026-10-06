@@ -12,6 +12,13 @@ use PHPUnit\Framework\TestCase;
 /** The real Sources DDL is exercised only in app_test, never in the local application database. */
 final class SourceMigrationTest extends TestCase
 {
+    protected function tearDown(): void
+    {
+        // Legacy DDL rollback tests recreate their original tables; restore additive review columns.
+        (require \App\Tests\Support\TestEnv::basePath() . '/database/migrations/2026_10_07_000032_review_fixes.php')->up(\App\Tests\Support\TestEnv::connection());
+        parent::tearDown();
+    }
+
     public function testSourcesMigrationRollbackAndReplayAndColumnDefaults(): void
     {
         $db = TestEnv::connection();

@@ -57,3 +57,8 @@ Mock contract fixtures are synthetic representations of official HTTP schemas, n
 - [Replicate HTTP API](https://replicate.com/docs/reference/http/), [file inputs](https://replicate.com/docs/topics/predictions/input-files), [official file encoding](https://github.com/replicate/replicate-python/blob/main/replicate/helpers.py).
 - [Real-ESRGAN](https://replicate.com/nightmareai/real-esrgan): current displayed billing $0.002/output image.
 - [Seedance 1 Pro](https://replicate.com/bytedance/seedance-1-pro): current displayed 480p rate $0.03/output second; default 10 seconds ≈ $0.30. Download/storage/traffic and taxes are excluded. Provider prices can change independently of code.
+
+
+## Review fixes: safe retries and video fencing
+
+Known HTTP 429 and typed pre-dispatch connect timeouts remain retryable through the existing Queue/backoff. A read timeout or uncertain paid POST outcome is not treated as a safe new paid operation. Text and semantic attempts retain the error classification. Video lease generations fence remote ID writes, poll releases and terminal transitions; a late worker cannot overwrite a completed job. Polling reuses the stored remote job ID. Known rejected video starts may retry the same local job; ambiguous starts remain protected.

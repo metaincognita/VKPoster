@@ -63,15 +63,15 @@ final class SelectionService
     /** Internal ingress only: caller must hold Source FOR UPDATE in the event's transaction before ACK. */
     public function evaluateLocked(int $workspaceId, int $sourceId, int $itemId, bool $automationCall = false): void
     {
-        $prior = $this->db->select('SELECT decision_mode FROM source_selection_decisions WHERE workspace_id = ? AND source_id = ? AND item_id = ?', [$workspaceId, $sourceId, $itemId])[0] ?? null;
+        $prior = $this->db->select('SELECT decision_mode, revision_hash FROM source_selection_decisions WHERE workspace_id = ? AND source_id = ? AND item_id = ?', [$workspaceId, $sourceId, $itemId])[0] ?? null;
         $item = $this->db->select('SELECT * FROM source_items WHERE workspace_id = ? AND source_id = ? AND id = ?', [$workspaceId, $sourceId, $itemId])[0] ?? throw new HttpException(404, 'Not found');
         $rawMessages = $this->db->select('SELECT message_id, text, entities_json, media_json, metadata_json, published_at, edited_at, revision_hash FROM source_messages WHERE workspace_id = ? AND source_id = ? AND item_id = ? ORDER BY message_id', [$workspaceId, $sourceId, $itemId]);
         $result = $this->deterministic($workspaceId, $sourceId, $item, $rawMessages);
-        if ($automationCall && $prior !== null && $prior['decision_mode'] === 'manual') {
+        if ($prior !== null && $prior['decision_mode'] === 'manual' && ($prior['revision_hash'] ?? null) === \App\Domain\Content\Processing\MaterialRepository::revision($item, $rawMessages)) {
             return;
         }
         $evaluation = $this->semantic->materialLocked($workspaceId, $sourceId, $item, $rawMessages, $result, $automationCall);
-        if ($prior !== null && $prior['decision_mode'] === 'manual') {
+        if ($prior !== null && $prior['decision_mode'] === 'manual' && ($prior['revision_hash'] ?? null) === \App\Domain\Content\Processing\MaterialRepository::revision($item, $rawMessages)) {
             return;
         }
         if ($evaluation !== null && $evaluation['status'] !== 'blocked') {
@@ -126,8 +126,8 @@ final class SelectionService
     {
         $item = $this->db->select('SELECT i.* FROM source_items i JOIN discovery_imports l ON l.material_id = i.id AND l.workspace_id = i.workspace_id WHERE i.workspace_id = ? AND i.id = ? AND i.source_id IS NULL', [$workspaceId, $itemId])[0] ?? throw new HttpException(404, 'Not found');
         $deterministic = $this->deterministic($workspaceId, null, $item, []);
-        $prior = $this->db->select('SELECT decision_mode FROM source_selection_decisions WHERE workspace_id = ? AND item_id = ? AND source_id IS NULL', [$workspaceId, $itemId])[0] ?? null;
-        if (($prior['decision_mode'] ?? '') === 'manual') {
+        $prior = $this->db->select('SELECT decision_mode, revision_hash FROM source_selection_decisions WHERE workspace_id = ? AND item_id = ? AND source_id IS NULL', [$workspaceId, $itemId])[0] ?? null;
+        if (($prior['decision_mode'] ?? '') === 'manual' && ($prior['revision_hash'] ?? null) === \App\Domain\Content\Processing\MaterialRepository::revision($item, [])) {
             return;
         }
         $evaluation = $this->semantic->materialLocked($workspaceId, null, $item, [], $deterministic, $automatic);
@@ -154,11 +154,14 @@ final class SelectionService
     private function write(int $workspaceId, ?int $sourceId, int $itemId, SelectionResult $result, string $mode, ?int $actor): void
     {
         $rules = $this->db->select('SELECT version, rules_json FROM source_selection_rules WHERE workspace_id = ? AND source_id <=> ?', [$workspaceId, $sourceId])[0] ?? null;
+        $item = $this->db->select('SELECT * FROM source_items WHERE workspace_id=? AND id=?', [$workspaceId, $itemId])[0];
+        $messages = $this->db->select('SELECT message_id, text, entities_json, media_json, metadata_json, published_at, edited_at, revision_hash FROM source_messages WHERE workspace_id=? AND item_id=? ORDER BY message_id', [$workspaceId, $itemId]);
+        $revision = \App\Domain\Content\Processing\MaterialRepository::revision($item, $messages);
         $now = DbTime::format($this->clock->now());
         $this->db->execute(
-            'INSERT INTO source_selection_decisions (workspace_id, source_id, item_id, selection_status, decision_mode, reason, matched_rule, rules_version, rules_snapshot_json, decided_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE selection_status=VALUES(selection_status), decision_mode=VALUES(decision_mode), reason=VALUES(reason), matched_rule=VALUES(matched_rule), rules_version=VALUES(rules_version), rules_snapshot_json=VALUES(rules_snapshot_json), decided_by=VALUES(decided_by), updated_at=VALUES(updated_at)',
-            [$workspaceId, $sourceId, $itemId, $result->status, $mode, $result->reason, $result->rule, $rules === null ? null : (int) $rules['version'], $rules === null ? null : (string) $rules['rules_json'], $actor, $now, $now]
+            'INSERT INTO source_selection_decisions (workspace_id, source_id, item_id, selection_status, decision_mode, reason, matched_rule, rules_version, rules_snapshot_json, decided_by, created_at, updated_at, revision_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE selection_status=VALUES(selection_status), decision_mode=VALUES(decision_mode), reason=VALUES(reason), matched_rule=VALUES(matched_rule), rules_version=VALUES(rules_version), rules_snapshot_json=VALUES(rules_snapshot_json), decided_by=VALUES(decided_by), updated_at=VALUES(updated_at), revision_hash=VALUES(revision_hash)',
+            [$workspaceId, $sourceId, $itemId, $result->status, $mode, $result->reason, $result->rule, $rules === null ? null : (int) $rules['version'], $rules === null ? null : (string) $rules['rules_json'], $actor, $now, $now, $revision]
         );
     }
 

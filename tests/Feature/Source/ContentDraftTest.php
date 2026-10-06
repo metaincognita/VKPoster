@@ -29,6 +29,13 @@ use App\Tests\Support\TestEnv;
 /** Full synthetic content-to-existing-publisher flow. No Telegram, AI or social service is contacted. */
 final class ContentDraftTest extends PostTestCase
 {
+    protected function tearDown(): void
+    {
+        // Legacy DDL rollback tests recreate their original tables; restore additive review columns.
+        (require \App\Tests\Support\TestEnv::basePath() . '/database/migrations/2026_10_07_000032_review_fixes.php')->up(\App\Tests\Support\TestEnv::connection());
+        parent::tearDown();
+    }
+
     /** @return array{WorkspaceContext,Source,array<string,mixed>,string,string} */
     public function fixture(bool $approved = true, bool $photos = false): array
     {
@@ -395,6 +402,39 @@ final class ContentDraftTest extends PostTestCase
         } finally {
             $migration->up($this->db);
         }
+    }
+
+    public function testIdenticalApprovalKeepsProcessingDraftAndPublishGuardCurrent(): void
+    {
+        [$ctx, $source, $item, $revision, $text] = $this->fixture();
+        $c = $this->app->container();
+        $post = $c->get(ContentDraftService::class)->create($ctx, $source, (string) $item['public_id'], $revision, $text);
+        $this->clock->advance(10);
+        $c->get(SelectionService::class)->decide($ctx, $source, (string) $item['public_id'], true);
+        self::assertSame($post->id, $c->get(ContentDraftService::class)->create($ctx, $source, (string) $item['public_id'], $revision, $text)->id);
+        self::assertSame(1, $this->db->table('source_text_processings')->count());
+        self::assertSame(1, $this->db->table('content_post_origins')->count());
+        self::assertNull($c->get(\App\Domain\Content\Publishing\ContentOriginGuard::class)->problem($post));
+    }
+
+    public function testLegacyDecisionHashMigrationPreservesProvenCurrentDraftAndProcessing(): void
+    {
+        [$ctx, $source, $item, $revision, $text] = $this->fixture();
+        $c = $this->app->container();
+        $post = $c->get(ContentDraftService::class)->create($ctx, $source, (string) $item['public_id'], $revision, $text);
+        $decision = $c->get(MaterialRepository::class)->selection($ctx, $source, (int) $item['id']) ?? throw new \LogicException('Missing decision');
+        unset($decision['revision_hash']);
+        $oldHash = hash('sha256', json_encode($decision, JSON_THROW_ON_ERROR));
+        $this->db->execute('UPDATE source_selection_decisions SET revision_hash=NULL WHERE workspace_id=? AND item_id=?', [$ctx->workspaceId, $item['id']]);
+        $this->db->execute('UPDATE source_text_processings SET selection_hash=? WHERE workspace_id=? AND item_id=?', [$oldHash, $ctx->workspaceId, $item['id']]);
+        $this->db->execute('UPDATE content_post_origins SET selection_hash=?, idempotency_key=? WHERE workspace_id=? AND item_id=?', [$oldHash, hash('sha256', 'material:' . $item['id'] . ':' . $revision . ':' . $oldHash), $ctx->workspaceId, $item['id']]);
+        $migration = require TestEnv::basePath() . '/database/migrations/2026_10_07_000032_review_fixes.php';
+        $migration->up($this->db);
+        $migration->up($this->db);
+        self::assertNull($c->get(\App\Domain\Content\Publishing\ContentOriginGuard::class)->problem($post));
+        self::assertSame($post->id, $c->get(ContentDraftService::class)->create($ctx, $source, (string) $item['public_id'], $revision, $text)->id);
+        self::assertSame(1, $this->db->table('source_text_processings')->count());
+        self::assertSame(1, $this->db->table('content_post_origins')->count());
     }
 
 }

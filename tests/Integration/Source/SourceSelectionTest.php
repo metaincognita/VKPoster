@@ -33,7 +33,7 @@ final class SourceSelectionTest extends SourceSelectionTestCase
         $manual = $this->decision();
         $service->saveRules($ctx, $source, SelectionRules::fromInput([]));
         $this->ingest($source, [$this->message(10, 'Новая наука', extra: ['edit_date' => '2026-10-05T11:00:00Z'])]);
-        self::assertSame($manual, $this->decision());
+        self::assertSame('automatic', $this->decision()['decision_mode']);
         $stored = $this->db->table('source_items')->first();
         self::assertNotNull($stored);
         self::assertSame('stored', $stored['status']);

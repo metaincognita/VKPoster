@@ -138,6 +138,10 @@ class ImageDeliveryTests(unittest.IsolatedAsyncioTestCase):
         api.request = lambda *args: {"ack": True, "job_id": "job-10"}
         await api.send_image(self.jobs[0])
 
+    async def test_requests_only_available_sources_for_fair_delivery(self):
+        await self.box.tick(self.api, self.readers)
+        self.api.image_jobs.assert_awaited_once_with(list(self.readers))
+
 
 @unittest.skipUnless(
     os.environ.get("TEST_INTERNAL_URL"), "requires isolated VKPoster HTTP test service"

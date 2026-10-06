@@ -44,6 +44,7 @@ final class SourceRepository extends WorkspaceScopedRepository
             'name' => $name,
             'type' => $type->value,
             'telegram_username' => $username,
+            'connection_version' => 1,
             'status' => SourceStatus::NotConnected->value,
             'enabled' => $enabled,
             'created_by' => $context->userId,
@@ -60,16 +61,21 @@ final class SourceRepository extends WorkspaceScopedRepository
         if ($source->workspaceId !== $context->workspaceId) {
             throw new LogicException('Source does not belong to the workspace.');
         }
-        $this->scoped($context, 'sources')->where('id', '=', $source->id)->update([
-            'name' => $name,
-            'type' => $type->value,
-            'telegram_username' => $username,
-            'status' => $source->telegramUsername === $username ? $source->status->value : SourceStatus::NotConnected->value,
-            'enabled' => $enabled,
-            'updated_at' => DbTime::format($this->clock->now()),
-        ]);
+        return $this->db->transaction(function () use ($context, $source, $name, $type, $username, $enabled): Source {
+            $row = $this->db->select('SELECT * FROM sources WHERE workspace_id=? AND id=? FOR UPDATE', [$context->workspaceId, $source->id])[0] ?? throw new LogicException('Source disappeared.');
+            $current = self::hydrate($row);
+            $this->scoped($context, 'sources')->where('id', '=', $source->id)->update([
+                'name' => $name,
+                'type' => $type->value,
+                'telegram_username' => $username,
+                'connection_version' => $current->connectionVersion + ($current->telegramUsername === $username ? 0 : 1),
+                'status' => $current->telegramUsername === $username ? $current->status->value : SourceStatus::NotConnected->value,
+                'enabled' => $enabled,
+                'updated_at' => DbTime::format($this->clock->now()),
+            ]);
 
-        return $this->find($context, $source->publicId) ?? throw new LogicException('The updated source disappeared.');
+            return $this->find($context, $source->publicId) ?? throw new LogicException('The updated source disappeared.');
+        });
     }
 
     /** @param array<string, mixed> $row */
@@ -86,6 +92,7 @@ final class SourceRepository extends WorkspaceScopedRepository
             (bool) $row['enabled'],
             DbTime::parse($row['created_at']) ?? new DateTimeImmutable('@0'),
             DbTime::parse($row['updated_at']) ?? new DateTimeImmutable('@0'),
+            (int) ($row['connection_version'] ?? 1),
         );
     }
 }

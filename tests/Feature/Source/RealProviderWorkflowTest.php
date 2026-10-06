@@ -122,13 +122,16 @@ final class RealProviderWorkflowTest extends SourceSelectionTestCase
     public function testSemanticMetadataPersistsAndDeterministicRejectionDoesNotCallApi(): void
     {
         [$ctx, $source, $item, $revision] = $this->fixture();
+        $this->db->execute("UPDATE source_selection_decisions SET decision_mode='automatic' WHERE workspace_id=? AND item_id=?", [$ctx->workspaceId, $item['id']]);
         $http = (new MockHttpClient())->expect('POST', 'https://api.openai.com/v1/responses', 200, (string) file_get_contents(TestEnv::basePath() . '/tests/Fixtures/ContentProviders/openai-semantic.json'));
         $c = $this->app->container();
-        $semantic = new SemanticSelection($this->db, $c->get(Clock::class), new OpenAiSemanticSelectionProvider(new OpenAiResponses(new ProviderHttp($http), 'test-key')), new SemanticPolicy(), $c->get(\App\Domain\Content\Automation\AutomationPolicies::class));
+        $semantic = new SemanticSelection($this->db, $c->get(Clock::class), new OpenAiSemanticSelectionProvider(new OpenAiResponses(new ProviderHttp($http), 'test-key')), new SemanticPolicy(), $c->get(\App\Domain\Content\Automation\AutomationPolicies::class), $c->get(\App\Kernel\Queue\Queue::class));
         $semantic->saveLocked($ctx, $source->id, SemanticSettings::fromInput(['enabled' => true, 'criteria' => 'AI news']));
         $messages = $c->get(MaterialRepository::class)->messages($ctx, $source, (int) $item['id']);
         $row = $semantic->materialLocked($ctx->workspaceId, $source->id, $item, $messages, new SelectionResult('approved', 'Pass', 'none'));
         self::assertNotNull($row);
+        $semantic->run((int) $row['id'], $c->get(SelectionService::class));
+        $row = $this->db->table('semantic_selection_evaluations')->where('id', '=', (int) $row['id'])->first() ?? throw new \LogicException('Missing regression row');
         self::assertSame(1150, json_decode($row['provider_metadata_json'], true)['total_tokens']);
         $row = $semantic->materialLocked($ctx->workspaceId, $source->id, $item, $messages, new SelectionResult('rejected', 'Exclude', 'exclude'));
         self::assertNotNull($row);
@@ -193,6 +196,58 @@ final class RealProviderWorkflowTest extends SourceSelectionTestCase
             $statuses[] = $workflow->run($ctx, $source, $item['public_id'], $job);
         }
         self::assertSame(['failed', 'failed', 'failed'], $statuses);
+    }
+
+    public function testLatePollCannotOverwriteCompletedNewerLease(): void
+    {
+        [$ctx, $source, $item, $revision] = $this->fixture();
+        $provider = $this->createMock(AsyncVideoProvider::class);
+        $provider->method('name')->willReturn('review_async');
+        $provider->expects(self::once())->method('start')->willReturn('remoteid');
+        $provider->expects(self::once())->method('poll')->willReturnCallback(function (string $remote, string $local) use ($ctx): VideoResult {
+            self::assertSame('remoteid', $remote);
+            $this->db->execute("UPDATE source_video_generations SET lease_generation=lease_generation+1, status='completed', selected=TRUE, result_json=? WHERE workspace_id=? AND public_id=?", [json_encode(['demonstration' => false, 'storage_key' => 'source-videos/winner/file'], JSON_THROW_ON_ERROR), $ctx->workspaceId, $local]);
+            return new VideoResult(false, 'source-videos/late/file');
+        });
+        $c = $this->app->container();
+        $c->instance(\App\Integrations\Video\VideoProvider::class, $provider);
+        $workflow = $c->get(VideoWorkflow::class);
+        $id = $workflow->request($ctx, $source, (string) $item['public_id'], $revision, VideoSettings::fromInput([]));
+        self::assertSame('processing', $workflow->run($ctx, $source, (string) $item['public_id'], $id));
+        self::assertSame('completed', $workflow->run($ctx, $source, (string) $item['public_id'], $id));
+        $row = $this->db->table('source_video_generations')->first() ?? throw new \LogicException('Missing regression row');
+        self::assertSame('completed', $row['status']);
+        self::assertSame('source-videos/winner/file', json_decode($row['result_json'], true, 32, JSON_THROW_ON_ERROR)['storage_key']);
+        self::assertTrue((bool) $row['selected']);
+    }
+
+    public function testRejectedVideoStart429RetriesSameLocalJob(): void
+    {
+        [$ctx, $source, $item, $revision] = $this->fixture();
+        $calls = 0;
+        $provider = $this->createMock(AsyncVideoProvider::class);
+        $provider->method('name')->willReturn('review_async');
+        $provider->expects(self::exactly(2))->method('start')->willReturnCallback(static function () use (&$calls): string {
+            if (++$calls === 1) {
+                throw new ProviderException('rate_limited', true);
+            }
+            return 'remoteid';
+        });
+        $provider->expects(self::once())->method('poll')->with('remoteid')->willReturn(new VideoResult(true));
+        $c = $this->app->container();
+        $c->instance(\App\Integrations\Video\VideoProvider::class, $provider);
+        $workflow = $c->get(VideoWorkflow::class);
+        $id = $workflow->request($ctx, $source, (string) $item['public_id'], $revision, VideoSettings::fromInput([]));
+        try {
+            $workflow->run($ctx, $source, (string) $item['public_id'], $id);
+            self::fail('429 must reach existing retry/backoff');
+        } catch (ProviderException $e) {
+            self::assertTrue($e->retryable);
+        }
+        self::assertSame('pending', ($this->db->table('source_video_generations')->first() ?? throw new \LogicException('Missing job'))['status']);
+        self::assertSame('processing', $workflow->run($ctx, $source, (string) $item['public_id'], $id));
+        self::assertSame('completed', $workflow->run($ctx, $source, (string) $item['public_id'], $id));
+        self::assertSame(1, $this->db->table('source_video_generations')->count());
     }
 
 }

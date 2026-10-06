@@ -55,13 +55,20 @@ final class ContentProcessor
         // No source/database lock is held during network work. No exception detail or free text is logged.
         $output = null;
         $error = null;
+        $category = null;
+        $retryable = false;
         try {
             $output = $this->text->process((string) $attempt['item']['text'], $attempt['messages'], $source === null ? '' : $source->telegramUsername, $settings);
+        } catch (\App\Integrations\ContentProviders\ProviderException $e) {
+            $category = $e->category;
+            $retryable = $e->retryable;
+            $error = $retryable ? 'Временная ошибка. Повторная попытка будет выполнена автоматически.' : 'Обработка не подтверждена. Проверьте provider перед повтором.';
         } catch (Throwable) {
+            $category = 'outcome_unknown';
             $error = 'Обработка не удалась. Повторите попытку.';
         }
         $metadata = $this->text->providerMetadata($settings);
-        return $this->db->transaction(function () use ($context, $source, $itemPublicId, $revision, $attempt, $output, $error, $metadata): string {
+        return $this->db->transaction(function () use ($context, $source, $itemPublicId, $revision, $attempt, $output, $error, $metadata, $category, $retryable): string {
             $this->lock($context, $source, $itemPublicId);
             $item = $this->materials->item($context, $source, $itemPublicId);
             $messages = $this->materials->messages($context, $source, (int) $item['id']);
@@ -73,7 +80,7 @@ final class ContentProcessor
             }
             $status = $stale ? 'stale' : ($error === null ? 'completed' : 'failed');
             $now = DbTime::format($this->clock->now());
-            $this->db->execute('UPDATE source_text_processings SET provider_metadata_json = ?, processed_text = ?, status = ?, error = ?, updated_at = ?, finished_at = ? WHERE workspace_id = ? AND source_id <=> ? AND public_id = ?', [json_encode($metadata, JSON_THROW_ON_ERROR), $output, $status, $stale ? 'Материал или решение отбора изменились. Обработайте актуальную версию.' : $error, $now, $now, $context->workspaceId, $source?->id, $attempt['public_id']]);
+            $this->db->execute('UPDATE source_text_processings SET error_category = ?, retryable = ?, provider_metadata_json = ?, processed_text = ?, status = ?, error = ?, updated_at = ?, finished_at = ? WHERE workspace_id = ? AND source_id <=> ? AND public_id = ?', [$category, $retryable, json_encode($metadata, JSON_THROW_ON_ERROR), $output, $status, $stale ? 'Материал или решение отбора изменились. Обработайте актуальную версию.' : $error, $now, $now, $context->workspaceId, $source?->id, $attempt['public_id']]);
             $this->audit->record('source.text_' . $status, $context->userId, 'source_item', $itemPublicId, [], $context->workspaceId);
             return $status;
         });

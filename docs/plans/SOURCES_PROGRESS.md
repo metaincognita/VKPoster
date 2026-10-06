@@ -215,3 +215,25 @@ Owner acceptance: Stage 3.2 is complete on automated/mocked verification. Real a
 - Реальные production credentials и публикация VK/MAX/Telegram/других каналов назначения.
 
 Ключи не запрашивались, платные API не вызывались. Эти внешние live-проверки не блокируют завершение Stage 3 Core. Production rollout и публичная публикация требуют отдельного разрешения; автоматическая публикация из Sources в этом проекте не включалась.
+
+
+## Code review fixes — completed
+
+Fixed only the agreed 2 Blocker + 6 Important findings; Nice to have remains out of scope.
+
+1. Docker context: recursive env/session/runtime/credentials exclusions; production image copies explicit application inputs only. Synthetic nested-secret build regression verifies context/image exclusions.
+2. Semantic evaluation uses the existing durable Queue after ingress commit. Event/attempt/job persist atomically before ACK; a crash after provider response never creates a second paid call. An uncertain outcome requires operator reconciliation.
+3. Stable selection hash excludes technical timestamps/actor. Identical manual approval preserves processing identity and a single Draft.
+4. Manual decisions bind to the material revision; Telegram edits require a new decision.
+5. Source connection generation increments under a row lock on username change. Old outbox envelopes are quarantined; ingress, processing and Draft guards reject obsolete bindings.
+6. Video lease generations and conditional transitions prevent late workers/poll results from overwriting completed jobs. Polling keeps the remote job ID.
+7. Retryable 429/connect timeout is classified separately from ambiguous paid outcomes and uses bounded Queue/backoff. Unknown paid outcomes never replay automatically.
+8. Photo jobs filter available readers before the limit and round-robin between Sources, preventing an unavailable Source from occupying the whole batch.
+
+Migration 32 is additive; rollback/replay is regression-tested. Deploy with workers paused, run migration, then resume updated workers. Proven-current legacy processing/Draft identities are preserved; old manual decisions without revision proof require reapproval. Original materials/history remain stored.
+
+Regression: full PHP suite **2049 tests / 38754 assertions**, passed. Reader **57 autonomous tests + 2 separate HTTP contracts**, passed. HTTP fixtures: 2 items / 4 messages, 4 image jobs / 8 variants, ACK/restart/dedup. PHPStan **808 files**, Ruff 0.14.1, code style, migration rollback/replay, /healthz DB/Redis, composer audit (0 advisories), synthetic Docker secret regression passed. Each of the eight findings has regression coverage, including provider response/persistence crash, stable approval/Draft, edits, obsolete binding, late video worker, safe 429 retry and photo starvation.
+
+No external live API calls were made; pending live-credentials checks remain unchanged. Publishing keeps the existing pipeline. Main and stash@{0} remain intact. Local .DS_Store, env/session/runtime files and credentials are excluded from this checkpoint.
+
+Review UI/axe: isolated app_test, four Source/Radar settings/material pages, 24 screenshots (375/768/1440 x light/dark), axe 360/375/768/1440; no blocking issues or horizontal overflow. Screenshot inspected. Production consent and live workspace data unchanged.

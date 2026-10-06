@@ -20,8 +20,8 @@ final class SourceItemRepository extends WorkspaceScopedRepository
             COALESCE(d.reason, 'Правила отбора ещё не настроены.') AS selection_reason, d.matched_rule, d.decision_mode,
             (SELECT GROUP_CONCAT(m.message_id ORDER BY m.message_id) FROM source_messages m WHERE m.item_id = i.id AND m.workspace_id = i.workspace_id) AS message_ids
             FROM source_items i LEFT JOIN source_selection_decisions d ON d.item_id = i.id AND d.workspace_id = i.workspace_id
-            WHERE i.workspace_id = ? AND i.source_id = ?";
-        $bindings = [$context->workspaceId, $source->id];
+            WHERE i.workspace_id = ? AND i.source_id = ? AND i.connection_version = ?";
+        $bindings = [$context->workspaceId, $source->id, $source->connectionVersion];
         if ($selectionStatus !== '') {
             $sql .= " AND COALESCE(d.selection_status, 'needs_review') = ?";
             $bindings[] = $selectionStatus;

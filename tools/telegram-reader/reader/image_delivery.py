@@ -20,7 +20,7 @@ class ImageDelivery:
         """)
 
     async def tick(self, api, readers):
-        jobs = await api.image_jobs()
+        jobs = await api.image_jobs(list(readers))
         with self.store.db:
             for job in jobs:
                 if job["source_id"] in readers:
