@@ -116,3 +116,19 @@ QR + локальная 2FA завершены владельцем. На реа
 ### Обработка текста 2.4A
 
 Добавлен отдельный [модуль обработки текста](source-text-processing.md), durable история source_text_processings, страница материала и Fake provider через существующий каталог Integrations/Ai. Обработка допускается только для current approved/revision; отбор, reader и publishing не переписаны. Настройки, исходник и результаты хранятся по попыткам отдельно от SourceItem.
+
+### Обработка изображений 2.4B
+
+Отдельный [модуль обработки изображений](source-image-processing.md): approved/revision guards, задания для отдельных фото, перенос лучшего файла через HTTP из reader с durable image_outbox, immutable private originals/variants, техническое качество и консервативная проверка совпадения, UI ручного выбора. Реальный internet search/enhancement пока заменены явными Fake providers. Медиатека/publishing и обработка текста не переписаны.
+
+## Video Generation Core
+
+Approved current materials have independent generation attempts, optional processed-text and selected-image bases, saved settings and manual result selection. The provider is Fake and creates no video. See [Video Generation Core](source-video-processing.md).
+
+## Separate Discovery origin
+
+Radar discovers metadata independently of user Sources. An explicit gateway imports selected excerpts into shared content processing with a separate origin link and needs_review. Source model and Telegram ingestion stay unchanged. See [Content Discovery](content-discovery.md).
+
+## Optional semantic layer (2.6)
+
+[Semantic Selection](semantic-selection.md) runs after deterministic approved in the existing SelectionService. Settings and revision history are separate tables; final decisions remain in source_selection_decisions, manual override wins and semantic off retains prior behavior. Fake provider only; no reader/publishing changes.

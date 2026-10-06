@@ -26,6 +26,7 @@ final class SourceController
         private readonly SourceService $service,
         private readonly SourceItemRepository $items,
         private readonly \App\Domain\Source\Selection\SelectionService $selection,
+        private readonly \App\Domain\Source\Selection\SemanticSelection $semantic,
     ) {
     }
 
@@ -54,6 +55,9 @@ final class SourceController
             'incoming_items' => $this->items->recent(WorkspaceRequest::context($request), $this->source($request), WorkspaceRequest::text($request->query['selection_status'] ?? null)),
             'selection_filter' => WorkspaceRequest::text($request->query['selection_status'] ?? null),
             'selection_rules' => ($this->selection->rules(WorkspaceRequest::context($request), $this->source($request)) ?? \App\Domain\Source\Selection\SelectionRules::fromInput([]))->form(),
+            'semantic_settings' => $this->semantic->settings(WorkspaceRequest::context($request)->workspaceId, $this->source($request)->id)['settings']->snapshot(),
+            'semantic_url' => $this->base($request) . '/' . $this->source($request)->publicId . '/semantic-settings',
+            'semantic_permission' => 'sources.manage',
             'rules_configured' => $this->selection->rules(WorkspaceRequest::context($request), $this->source($request)) !== null,
         ]);
     }

@@ -361,3 +361,19 @@ erDiagram
 ## Отбор входящих материалов Sources
 
 Миграция `2026_10_05_000022_create_source_selection.php`: `source_selection_rules` (одна версия правил на Source) и `source_selection_decisions` (одна актуальная оценка на item: selection_status, decision_mode, reason, matched_rule, rules_version и rules_snapshot_json, decided_by). Workspace/source/item FK каскадные; пользователь-автор nullable с SET NULL. Индекс фильтра статуса: workspace_id/source_id/selection_status/item_id. Existing items backfill — needs_review. Технический status и таблица sources не меняются. См. [Sources](modules/sources.md#подэтап-23--детерминированный-отбор-и-ручные-решения).
+
+## Изображения Sources
+
+Миграция `2026_10_06_000024_create_source_image_processing.php`: `source_image_processings` — per-photo attempt/job, workspace/source/item/message FK, исходные Telegram IDs, revision/selection snapshots, status/error, selected variant и timestamps. `source_image_variants` — отдельные private original/candidate/enhanced files и sanitized previews, SHA-256/dimensions/MIME/bytes, technical quality/metrics, provenance/verification/confidence/provider. Статус отбора и SourceItem не изменяются; обратимый down удаляет только новые таблицы. [Подробнее](modules/source-image-processing.md).
+
+## Source video generation
+
+Migration 25 adds `source_video_generations`: scoped attempt history, revision/selection hashes, versioned settings/basis snapshots, lifecycle status, result manifest, safe error, selected version and timestamps. See [video processing](modules/source-video-processing.md).
+
+## Content Discovery
+
+Migration 26 adds discovery_items, discovery_clusters, discovery_item_keys, discovery_runs and discovery_imports. Registered Discovery content uses source_id=NULL in shared source_items, source_selection_decisions and source_text_processings; no Source is fabricated. See [Discovery](modules/content-discovery.md).
+
+## Semantic Selection (migration 27)
+
+`semantic_selection_settings` — версии per-workspace Source/Radar policy; `semantic_selection_evaluations` — отдельная неизменяемая история origin/revision/policy, deterministic outcome, structured provider decision, score, confidence и composed decision. Итог остаётся в `source_selection_decisions`. Технические processing/source/discovery status не смешиваются. См. [Semantic Selection](modules/semantic-selection.md).

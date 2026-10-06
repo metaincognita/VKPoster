@@ -76,4 +76,6 @@
 <p class="mt-2 text-sm text-muted">{{ t('Технические результаты обработки за выбранный период. Тексты и инструкции здесь не отображаются.') }}</p>
 <dl class="mt-3 grid gap-2">{% for status, label in {processing: 'Обрабатываются', completed: 'Готово', failed: 'Ошибки', stale: 'Устаревшие попытки'} %}<div class="flex justify-between gap-3"><dt>{{ t(label) }}</dt><dd>{{ source_text[status] }}</dd></div>{% endfor %}</dl>
 </section>
+{% set semantic_counts %}<dl class="grid gap-2">{% for status, label in {completed: 'Оценены', failed: 'Ошибки', blocked: 'Остановлены правилами'} %}<div class="flex justify-between gap-3"><dt>{{ t(label) }}</dt><dd>{{ semantic_selection[status] }}</dd></div>{% endfor %}</dl><p class="mt-3 text-sm text-muted">{{ t('Структурированные оценки Fake provider. Содержимое материалов и критерии здесь не отображаются.') }}</p>{% endset %}
+<div class="mt-5">{{ d.card(t('Смысловой отбор'), body = semantic_counts) }}</div>
 {% endblock %}

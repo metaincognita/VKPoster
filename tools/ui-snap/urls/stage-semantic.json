@@ -1,0 +1,6 @@
+[
+  {"name":"semantic-source","url":"/w/{ws}/sources","login_as":"semantic-ui@example.com","actions":[{"click":"button[data-cookie-choice='necessary']"},{"click":"main a:has-text('Смысловой отбор')"},{"press":["body","Home"]}]},
+  {"name":"semantic-source-material","url":"/w/{ws}/sources","login_as":"semantic-ui@example.com","actions":[{"click":"button[data-cookie-choice='necessary']"},{"click":"main a:has-text('Смысловой отбор')"},{"click":"main a:has-text('Открыть материал') >> nth=1"},{"press":["body","Home"]}]},
+  {"name":"semantic-radar","url":"/w/{ws}/radar?status=imported&ranking=semantic","login_as":"semantic-ui@example.com","actions":[{"click":"button[data-cookie-choice='necessary']"},{"press":["body","Home"]}]},
+  {"name":"semantic-radar-material","url":"/w/{ws}/radar?status=imported","login_as":"semantic-ui@example.com","actions":[{"click":"button[data-cookie-choice='necessary']"},{"click":"main a:has-text('Открыть материал')"},{"press":["body","Home"]}]}
+]

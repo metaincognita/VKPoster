@@ -1,0 +1,16 @@
+[
+  {
+    "source_key": "demo.social",
+    "source_name": "Demo Social Research",
+    "url": "https://example.com/social/exoplanet",
+    "external_id": "social-1",
+    "title": "Новый орбитальный телескоп обнаружил воду на экзопланете",
+    "excerpt": "Тестовый материал: орбитальный телескоп обнаружил воду на экзопланете. Данные проверяют исследователи.",
+    "hours_ago": 1,
+    "language": "ru",
+    "engagement": {
+      "reactions": 400,
+      "shares": 30
+    }
+  }
+]

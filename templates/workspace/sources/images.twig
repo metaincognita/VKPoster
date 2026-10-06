@@ -1,0 +1,43 @@
+{% extends 'layouts/app.twig' %}
+{% import 'components/display.twig' as d %}
+{% import 'components/forms.twig' as f %}
+{% set nav_current = 'sources' %}
+{% set qualities = {good: 'Хорошее', acceptable: 'Приемлемое', poor: 'Низкое'} %}
+{% set kinds = {original: 'Исходное изображение', candidate: 'Найденная версия', enhanced: 'Enhanced-версия'} %}
+{% set statuses = {queued: 'Ожидает reader', completed: 'Готово', failed: 'Ошибка', stale: 'Устарело'} %}
+{% block title %}{{ t('Обработка изображений') }} · {{ app_name }}{% endblock %}
+{% block content %}
+{{ d.breadcrumbs([{label: t('Источники'), href: '/w/' ~ workspace.workspacePublicId ~ '/sources'}, {label: source.name, href: '/w/' ~ workspace.workspacePublicId ~ '/sources/' ~ source.publicId}, {label: t('Материал'), href: base}, {label: t('Обработка изображений')}]) }}
+<div class="mt-3">{{ d.page_header(t('Обработка изображений'), t('Каждая фотография альбома обрабатывается отдельно. Оригиналы сохраняются без изменений.')) }}</div>
+{{ d.alert('info', t('Поиск и enhancement'), t('Поиск пока использует Fake provider и не обращается в интернет. Fake enhancement сохраняет отдельную копию без улучшения качества. Найденные версии не выбираются автоматически.')) }}
+{% if not approved %}<p class="mt-4">{{ t('Для обработки сначала примите материал на странице источника.') }}</p>{% endif %}
+{% if not source.enabled %}<p class="mt-4">{{ t('Включите источник, чтобы reader мог загрузить фотографии.') }}</p>{% endif %}
+{% if can('sources.manage') %}<form method="post" action="{{ base }}/images" class="my-5" data-image-processing>{{ csrf_field() }}<input type="hidden" name="revision" value="{{ revision }}">{{ f.button(t('Получить и обработать изображения'), type = 'submit', disabled = not approved or not source.enabled) }}</form>{% endif %}
+{% if history is empty %}<p class="my-5 text-muted">{{ t('Пока нет результатов обработки изображений') }}</p>{% endif %}
+{% for run in history %}
+{% set result %}
+<p>{{ d.badge(t(statuses[run.status] ?? 'Ошибка')) }} · Telegram {{ run.telegram_message_id }} · {{ run.created_at }} UTC</p>
+{% if not run.current %}<p class="mt-3">{{ t('Материал или решение отбора изменились. Эта попытка недоступна для выбора.') }}</p>{% endif %}
+{% if run.error %}<p class="mt-3" role="status">{{ run.error }}</p>{% endif %}
+<div class="mt-4 grid gap-5 md:grid-cols-2">
+{% for variant in run.variants %}
+{% set variant_body %}
+<h2 class="font-semibold">{{ t(kinds[variant.kind] ?? 'Изображение') }}{% if run.selected_variant == variant.public_id %} · {{ t('Итоговое выбранное изображение') }}{% endif %}</h2>
+<img class="mt-3 h-auto max-w-full rounded-lg" src="{{ base }}/images/{{ variant.public_id }}/preview" alt="{{ t(kinds[variant.kind] ?? 'Изображение') }}" loading="lazy" width="{{ variant.width }}" height="{{ variant.height }}">
+<p class="mt-3">{{ variant.width }}×{{ variant.height }} · {{ variant.mime }} · {{ variant.bytes }} {{ t('байт') }} · {{ t('Качество') }}: {{ t(qualities[variant.quality] ?? 'Низкое') }}</p>
+<p class="mt-2 break-all text-sm">SHA-256: {{ variant.sha256 }}</p>
+{% if variant.source_url %}<p class="mt-2 break-all">{{ t('Источник найденной версии') }}: <a class="text-link underline" href="{{ variant.source_url }}" target="_blank" rel="noopener noreferrer">{{ variant.source_url }}</a></p>{% endif %}
+{% if variant.kind != 'original' %}<p class="mt-2">{{ t('Проверка совпадения') }}: {{ t({verified: 'Совпадение подтверждено технически', needs_review: 'Требуется визуальная проверка', mismatch: 'Недостаточное совпадение'}[variant.verification] ?? 'Требуется визуальная проверка') }}{% if variant.confidence is not null %} · {{ (variant.confidence * 100)|round(1) }}%</p>{% endif %}{% endif %}
+{% if variant.provider == 'fake' %}<p class="mt-2 text-sm text-muted">{{ t(variant.kind == 'enhanced' ? 'Fake provider: демонстрационная копия, качество не улучшено.' : 'Fake provider: тестовый кандидат, интернет-поиск не выполнялся.') }}</p>{% endif %}
+<details class="mt-3"><summary>{{ t('Технические показатели') }}</summary><dl class="mt-2 grid gap-1">{% for key, value in variant.metrics %}<div class="break-all"><dt>{{ key }}</dt><dd>{{ value ?? '—' }}</dd></div>{% endfor %}</dl></details>
+{% if can('sources.manage') and run.current and run.status == 'completed' %}
+<form method="post" action="{{ base }}/images/select" class="mt-4" data-image-processing>{{ csrf_field() }}<input type="hidden" name="variant" value="{{ variant.public_id }}">
+{% if variant.kind == 'candidate' and variant.verification != 'verified' %}<div class="mb-3">{{ f.checkbox('confirmed', t('Я проверил совпадение изображений визуально'), id = 'confirmed-' ~ variant.public_id) }}</div>{% endif %}
+{{ f.button(t('Выбрать эту версию'), type = 'submit') }}
+</form>{% endif %}
+{% endset %}{{ d.card(class = 'min-w-0', body = variant_body) }}{% endfor %}</div>
+{% endset %}
+<div class="mt-5">{{ d.card(t('Фотография') ~ ' · ' ~ run.telegram_message_id, body = result) }}</div>
+{% endfor %}
+<script src="{{ asset('js/sources.js') }}" nonce="{{ csp_nonce() }}" defer></script>
+{% endblock %}

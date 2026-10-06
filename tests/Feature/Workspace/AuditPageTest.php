@@ -67,9 +67,9 @@ final class AuditPageTest extends WorkspaceTestCase
         self::assertStringContainsString('zed@example.com', $byOwner);
         self::assertStringNotContainsString('Опубликован пост', $byOwner);
 
-        $today = gmdate('Y-m-d');
+        $today = $this->clock->now()->setTimezone(new \DateTimeZone($workspace->timezone))->format('Y-m-d');
         self::assertStringContainsString('zed@example.com', $this->get($url . '?from=' . $today . '&to=' . $today)->body);
-        $future = gmdate('Y-m-d', time() + 5 * 86400);
+        $future = $this->clock->now()->setTimezone(new \DateTimeZone($workspace->timezone))->modify('+5 days')->format('Y-m-d');
         self::assertStringContainsString('Ничего не нашли', $this->get($url . '?from=' . $future)->body);
         self::assertStringContainsString('zed@example.com', $this->get($url . '?from=garbage&actor=abc&group=%27%20OR%201')->body, 'junk filters are ignored');
     }

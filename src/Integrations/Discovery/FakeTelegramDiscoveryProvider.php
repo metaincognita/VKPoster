@@ -1,0 +1,18 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Integrations\Discovery;
+
+/** Synthetic discovery adapter; no network or commercial service dependencies. */
+final class FakeTelegramDiscoveryProvider extends FixtureDiscoveryProvider
+{
+    public function name(): string
+    {
+        return 'fake_telegram';
+    }
+    public function sourceType(): string
+    {
+        return 'telegram';
+    }
+}

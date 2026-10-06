@@ -150,6 +150,9 @@ final class WorkspaceNav
         if ($this->permissions->allows($workspace->role, 'sources.view')) {
             $items[] = ['id' => 'sources', 'label' => 'Источники', 'icon' => 'share-2', 'href' => $base . '/sources'];
         }
+        if ($this->permissions->allows($workspace->role, 'discovery.view')) {
+            $items[] = ['id' => 'radar', 'label' => 'Радар', 'icon' => 'search', 'href' => $base . '/radar'];
+        }
         if ($this->permissions->allows($workspace->role, 'media.view')) {
             $items[] = ['id' => 'media', 'label' => 'Медиатека', 'icon' => 'images', 'href' => $base . '/media'];
         }

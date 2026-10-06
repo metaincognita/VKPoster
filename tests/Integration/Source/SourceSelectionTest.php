@@ -135,6 +135,8 @@ final class SourceSelectionTest extends SourceSelectionTestCase
         $source = $this->app->container()->get(SourceService::class)->create($this->contextFor($workspace, $owner), 'Source', 'telegram', '@sample_channel', true);
         $this->ingest($source, [$this->message(10)]);
         $migration = require TestEnv::basePath() . '/database/migrations/2026_10_05_000022_create_source_selection.php';
+        $discovery = require TestEnv::basePath() . '/database/migrations/2026_10_06_000026_create_content_discovery.php';
+        $discovery->down($this->db);
         $migration->down($this->db);
         try {
             $migration->up($this->db);
@@ -146,6 +148,7 @@ final class SourceSelectionTest extends SourceSelectionTestCase
             if ($this->db->select("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='source_selection_decisions'") === []) {
                 $migration->up($this->db);
             }
+            $discovery->up($this->db);
         }
     }
 }

@@ -95,6 +95,15 @@ final class MetricsAggregator
         ));
 
         // Separate text-processing outcomes; no content, credentials or fake AI billing.
+        foreach ($this->db->select('SELECT status, COUNT(*) AS c FROM source_image_processings WHERE created_at >= ? AND created_at < ? GROUP BY status', [$from, $to]) as $row) {
+            $add('source_image_attempts', (string) $row['status'], (int) $row['c']);
+        }
+        foreach ($this->db->select('SELECT status, COUNT(*) AS c FROM discovery_runs WHERE created_at >= ? AND created_at < ? GROUP BY status', [$from, $to]) as $row) {
+            $add('discovery_runs', (string) $row['status'], (int) $row['c']);
+        }
+        foreach ($this->db->select('SELECT status, COUNT(*) AS c FROM source_video_generations WHERE created_at >= ? AND created_at < ? GROUP BY status', [$from, $to]) as $row) {
+            $add('source_video_attempts', (string) $row['status'], (int) $row['c']);
+        }
         foreach ($this->db->select('SELECT status, COUNT(*) AS c FROM source_text_processings WHERE created_at >= ? AND created_at < ? GROUP BY status', [$from, $to]) as $row) {
             $add('source_text_attempts', (string) $row['status'], (int) $row['c']);
         }
@@ -144,6 +153,10 @@ final class MetricsAggregator
                 $add('mrr_churn', $was['currency'], $was['mrr']);
                 $add('paying_churned', $was['currency'], 1);
             }
+        }
+
+        foreach ($this->db->select('SELECT status, COUNT(*) AS c FROM semantic_selection_evaluations WHERE created_at >= ? AND created_at < ? GROUP BY status', [$from, $to]) as $row) {
+            $add('semantic_evaluations', (string) $row['status'], (int) $row['c']);
         }
 
         // Activity.

@@ -1,0 +1,42 @@
+{% extends 'layouts/app.twig' %}
+{% import 'components/display.twig' as d %}
+{% import 'components/forms.twig' as f %}
+{% set nav_current = 'sources' %}
+{% set status_labels = {pending: 'Ожидает запуска', processing: 'Выполняется', completed: 'Готово', failed: 'Ошибка'} %}
+{% block title %}{{ t('Генерация видео') }} · {{ app_name }}{% endblock %}
+{% block content %}
+{{ d.breadcrumbs([{label: t('Источники'), href: '/w/' ~ workspace.workspacePublicId ~ '/sources'}, {label: source.name, href: '/w/' ~ workspace.workspacePublicId ~ '/sources/' ~ source.publicId}, {label: t('Материал'), href: base}, {label: t('Генерация видео')}]) }}
+<div class="mt-3">{{ d.page_header(t('Генерация видео'), t('Создавайте отдельные задания и выбирайте итоговую версию. Исходный материал сохраняется.')) }}</div>
+<div class="mt-5">{{ d.alert('info', t('Демонстрационный провайдер'), t('Fake provider показывает жизненный цикл задания. Настоящее видео, звук и файлы не создаются.')) }}</div>
+{% set controls %}
+{% if not approved %}<p>{{ t('Для генерации сначала примите материал на странице источника.') }}</p>{% endif %}
+{% if can('sources.manage') %}<form method="post" action="{{ base }}/videos" class="mt-4 grid gap-5" data-source-form data-video-processing>
+{{ csrf_field() }}<input type="hidden" name="revision" value="{{ revision }}">
+{{ f.select('aspect_ratio', t('Соотношение сторон'), {'9:16': t('Вертикальное · 9:16'), '16:9': t('Горизонтальное · 16:9'), '1:1': t('Квадратное · 1:1')}, value = old('aspect_ratio', settings.aspect_ratio), error = errors('aspect_ratio')|first) }}
+{{ f.input('duration', t('Длительность, секунды'), type = 'number', value = old('duration', settings.duration), required = true, attrs = {min: 1, max: 60}, error = errors('duration')|first) }}
+{{ f.textarea('instruction', t('Текстовая инструкция'), value = old('instruction', settings.instruction), max = 4000, error = errors('instruction')|first) }}
+{{ f.select('text_version', t('Текстовая основа'), texts, value = old('text_version', ''), error = errors('text_version')|first, hint = t('Доступны готовые результаты обработки актуального материала.')) }}
+{{ f.select('image_version', t('Визуальная основа'), images, value = old('image_version', ''), error = errors('image_version')|first, hint = t('Доступны выбранные версии из обработки изображений. При отсутствии изображения можно создать задание без него.')) }}
+<div>{{ f.button(t('Создать задание'), type = 'submit', disabled = not approved) }}</div>
+</form>{% endif %}
+{% endset %}
+<div class="mt-5">{{ d.card(t('Настройки генерации'), body = controls) }}</div>
+{% set results %}
+{% if history is empty %}<p class="text-muted">{{ t('Пока нет заданий генерации') }}</p>{% else %}<ul class="grid gap-5">
+{% for run in history %}<li class="border-b border-line pb-5">
+<p>{{ d.badge(t(status_labels[run.status] ?? 'Ошибка')) }} · {{ t('Версия настроек') }} {{ run.settings_version }} · {{ run.created_at|date('d.m.Y H:i', workspace.timezone) }} · {{ workspace.timezone }}</p>
+<p class="mt-2">{{ run.settings.aspect_ratio }} · {{ run.settings.duration }} {{ t('секунд') }}</p>
+{% if run.selected %}<p class="mt-2">{{ d.badge(t(run.current ? 'Итоговая версия' : 'Выбрана ранее · основа изменилась')) }}</p>{% endif %}
+{% if not run.current %}<p class="mt-2 text-muted">{{ t('Материал, решение отбора или основа изменились. Для продолжения создайте новое задание.') }}</p>{% endif %}
+{% if run.error %}<p role="alert" class="mt-2 text-bad-fg">{{ run.error }}</p>{% endif %}
+{% if run.status == 'completed' and run.provider == 'fake' %}<p class="mt-2">{{ t('Демонстрационный результат готов. Видеофайла нет.') }}</p>{% endif %}
+<details class="mt-3"><summary>{{ t('Сохранённые настройки') }}</summary><p class="mt-2 break-words whitespace-pre-wrap">{{ run.settings.instruction }}</p><p class="mt-2">{{ t(run.settings.text_version ? 'Обработанный текст' : 'Исходный текст') }} · {{ t(run.settings.image_version ? 'Выбранное изображение' : 'Без изображения') }}</p></details>
+{% if can('sources.manage') and run.current %}
+{% if run.status == 'pending' %}<form method="post" action="{{ base }}/videos/run" class="mt-4" data-video-processing>{{ csrf_field() }}<input type="hidden" name="job" value="{{ run.public_id }}">{{ f.button(t('Запустить демонстрацию'), type = 'submit') }}</form>{% endif %}
+{% if run.status == 'completed' and not run.selected %}<form method="post" action="{{ base }}/videos/select" class="mt-4" data-video-processing>{{ csrf_field() }}<input type="hidden" name="job" value="{{ run.public_id }}">{{ f.button(t('Выбрать итоговую версию'), type = 'submit', variant = 'secondary') }}</form>{% endif %}
+{% endif %}
+</li>{% endfor %}</ul><p class="mt-3 text-sm text-muted">{{ t('Показаны последние 50 заданий. Предыдущие результаты сохраняются.') }}</p>{% endif %}
+{% endset %}
+<div class="mt-5">{{ d.card(t('История генераций'), body = results) }}</div>
+<script src="{{ asset('js/sources.js') }}" nonce="{{ csp_nonce() }}" defer></script>
+{% endblock %}

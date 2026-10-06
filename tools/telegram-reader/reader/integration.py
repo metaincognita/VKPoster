@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from telethon import TelegramClient
 
 from .auth import authenticate
+from .image_delivery import ImageDelivery
 from .service import Reader
 from .transport import TelegramTransport
 
@@ -72,6 +73,17 @@ class InternalAPI:
         result = await asyncio.to_thread(self.request, "/internal/source-events", event)
         if result.get("ack") is not True or result.get("event_id") != event["event_id"]:
             raise ValueError("invalid_ack")
+
+    async def image_jobs(self):
+        result = await asyncio.to_thread(self.request, "/internal/source-image-jobs")
+        if result.get("version") != 1 or not isinstance(result.get("jobs"), list):
+            raise ValueError("invalid_image_job_list")
+        return result["jobs"]
+
+    async def send_image(self, payload):
+        result = await asyncio.to_thread(self.request, "/internal/source-image-results", payload)
+        if result.get("ack") is not True or result.get("job_id") != payload["job_id"]:
+            raise ValueError("invalid_image_ack")
 
 
 class Outbox:
@@ -187,6 +199,7 @@ class SourceWorker:
     def __init__(self, store, api, factory, state, source_id=None):
         self.store, self.api, self.factory, self.state = store, api, factory, state
         self.outbox = Outbox(store)
+        self.images = ImageDelivery(store)
         self.readers = {}
         self.source_id = source_id
 
@@ -265,7 +278,9 @@ class SourceWorker:
                     },
                 )
                 print("source_read_error type=" + type(error).__name__, flush=True)
-        return await self.outbox.deliver(self.api, enabled)
+        delivered = await self.outbox.deliver(self.api, enabled)
+        await self.images.tick(self.api, self.readers)
+        return delivered
 
 
 async def run_sources(args, state, store):

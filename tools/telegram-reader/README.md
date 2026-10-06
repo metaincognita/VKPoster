@@ -225,3 +225,18 @@ After successful authorization, the controlled smoke uses `sources --once --sour
 ### QR with Telegram 2FA
 
 Run `login-qr` **in the foreground in a local Terminal**, not via detached `-d`/background Docker execution. Compose keeps stdin/TTY attached. After QR scanning, Telegram's password requirement is handled by a hidden Terminal-only prompt; the MTProto event loop remains active while typing. No browser password form, environment variable or saved password is used. Up to three incorrect-password attempts are allowed without rescanning; an empty password stops safely. If terminal echo cannot be disabled, input is refused instead of falling back to visible stdin. An authorized session still skips all login prompts.
+
+## Sources Image Processing (2.4B)
+
+Команда `sources` теперь также получает `/internal/source-image-jobs` и доставляет best PhotoSize bytes + SHA-256 на `/internal/source-image-results`. Работа только для enabled Sources и актуальных approved jobs. Обычный импорт metadata не скачивает все фото автоматически. Один аккаунт/session сохранён; login/QR не менялись.
+
+Reader использует существующий downloader, приватный SHA-256 cache и отдельную durable SQLite `image_outbox`. Задание и результат сохраняются до передачи, результат ACKed только после durable ответа PHP. Потерянный ACK/restart повторяют тот же job без повторного download. Ошибки cache приводят к повторной загрузке, payload в логах отсутствует. PHP лимитирует фото 16 MiB; полная image-processing architecture: `docs/architecture/modules/source-image-processing.md`.
+
+После изменения Python требуется пересборка отдельного образа. Из корня VKPoster:
+
+```sh
+docker compose -f tools/telegram-reader/compose.yaml build reader
+docker compose -f tools/telegram-reader/compose.yaml up -d reader
+```
+
+Новая команда авторизации не требуется при готовой persistent session. Тесты используют Docker и синтетические фото; `tests/run_php_contract.sh` дополнительно проверяет binary transfer, четыре photo jobs двух Sources, commit/ACK/duplicate и restart на `app_test`. Не запускайте этот contract script одновременно с PHP suite: они используют общую тестовую БД. Live Telegram photo download на этом этапе отдельно не проверялся.

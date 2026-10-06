@@ -19,6 +19,8 @@
 {{ d.card(t('Настройки источника'), body = details) }}
 {% set rules %}{% include 'workspace/sources/selection-rules.twig' %}{% endset %}
 <div class="mt-5">{{ d.card(t('Правила отбора'), body = rules) }}</div>
+{% set semantic_body %}{% include 'workspace/sources/semantic-settings.twig' %}{% endset %}
+<div class="mt-5">{{ d.card(t('Смысловой отбор'), body = semantic_body) }}</div>
 {% set received %}
 <form method="get" action="{{ base }}/{{ source.publicId }}" class="mb-4 flex flex-wrap items-end gap-3">
 {{ f.select('selection_status', t('Статус отбора'), {'': t('Все материалы'), approved: t('Принятые'), rejected: t('Отклонённые'), needs_review: t('Требуют проверки')}, value = selection_filter) }}

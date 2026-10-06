@@ -1,0 +1,26 @@
+[
+  {
+    "source_key": "demo.news",
+    "source_name": "Demo News Desk",
+    "url": "https://example.com/news/exoplanet?utm_source=fixture",
+    "external_id": "news-1",
+    "title": "Орбитальный телескоп обнаружил воду на экзопланете",
+    "excerpt": "Тестовый материал: орбитальный телескоп обнаружил воду на экзопланете. Данные проверяют исследователи.",
+    "hours_ago": 2,
+    "language": "ru",
+    "metadata": {
+      "authority": 0.9,
+      "authority_basis": "Синтетическая оценка fixture"
+    }
+  },
+  {
+    "source_key": "demo.tech",
+    "source_name": "Demo Technology Desk",
+    "url": "https://example.com/news/battery",
+    "external_id": "news-2",
+    "title": "Исследователи создали новый аккумулятор для электромобилей",
+    "excerpt": "Тестовая отдельная история о разработке аккумуляторов.",
+    "hours_ago": 12,
+    "language": "ru"
+  }
+]

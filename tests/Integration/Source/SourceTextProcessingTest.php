@@ -168,8 +168,11 @@ final class SourceTextProcessingTest extends SourceSelectionTestCase
     public function testProcessingMigrationRollbackReplay(): void
     {
         $migration = require TestEnv::basePath() . '/database/migrations/2026_10_05_000023_create_source_text_processings.php';
+        $discovery = require TestEnv::basePath() . '/database/migrations/2026_10_06_000026_create_content_discovery.php';
+        $discovery->down($this->db);
         $migration->down($this->db);
         $migration->up($this->db);
+        $discovery->up($this->db);
         self::assertSame(0, $this->db->table('source_text_processings')->count());
         self::assertContains('settings_version', array_column($this->db->select('SHOW COLUMNS FROM source_text_processings'), 'Field'));
     }

@@ -22,6 +22,8 @@ use PHPUnit\Framework\TestCase;
 final class PermissionsTest extends TestCase
 {
     private const MATRIX = [
+        'discovery.view' => ['owner' => true, 'admin' => true, 'editor' => false, 'author' => false, 'viewer' => false, 'client' => false],
+        'discovery.manage' => ['owner' => true, 'admin' => true, 'editor' => false, 'author' => false, 'viewer' => false, 'client' => false],
         'sources.view' => ['owner' => true, 'admin' => true, 'editor' => false, 'author' => false, 'viewer' => false, 'client' => false],
         'sources.manage' => ['owner' => true, 'admin' => true, 'editor' => false, 'author' => false, 'viewer' => false, 'client' => false],
         'workspace.billing' => ['owner' => true, 'admin' => false, 'editor' => false, 'author' => false, 'viewer' => false, 'client' => false],

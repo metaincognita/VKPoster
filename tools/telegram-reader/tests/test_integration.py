@@ -115,6 +115,7 @@ class OutboxTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_worker_multiple_sources_disable_and_existing_history_export(self):
         api = SimpleNamespace(
+            image_jobs=AsyncMock(return_value=[]),
             sources=AsyncMock(
                 return_value=[
                     {"id": "a", "username": "channel_a"},

@@ -59,7 +59,8 @@ final class Analytics
             $this->firstTouch->attribute($actorId);
         }
         match ($action) {
-            'source.text_completed', 'source.text_failed', 'source.text_stale' => $this->track(str_replace('.', '_', $action), $actorId, $workspaceId),
+            'selection.semantic_settings_updated', 'source.images_completed', 'source.images_failed', 'source.images_stale',
+            'discovery.refreshed', 'discovery.imported', 'source.video_completed', 'source.video_failed', 'source.text_completed', 'source.text_failed', 'source.text_stale' => $this->track(str_replace('.', '_', $action), $actorId, $workspaceId),
             'auth.register', 'auth.social.registered' => $this->track('user_registered', $actorId, null, ['method' => $action === 'auth.register' ? 'email' : 'social'], 'user_registered:' . $actorId),
             'auth.email.verified' => $this->track('email_verified', $actorId, null, [], 'email_verified:' . $actorId),
             'channel.connected' => $this->channelConnected($actorId, $workspaceId, $meta),

@@ -22,10 +22,10 @@ final class ContentProcessor
     }
 
     /** Processes only the requested current approved snapshot; every retry appends a new settings version. */
-    public function process(WorkspaceContext $context, Source $source, string $itemPublicId, string $revision, TextSettings $settings): string
+    public function process(WorkspaceContext $context, ?Source $source, string $itemPublicId, string $revision, TextSettings $settings): string
     {
         $attempt = $this->db->transaction(function () use ($context, $source, $itemPublicId, $revision, $settings): array {
-            $this->lock($context, $source);
+            $this->lock($context, $source, $itemPublicId);
             $item = $this->materials->item($context, $source, $itemPublicId);
             $messages = $this->materials->messages($context, $source, (int) $item['id']);
             $selection = $this->materials->selection($context, $source, (int) $item['id']);
@@ -44,7 +44,7 @@ final class ContentProcessor
             $now = DbTime::format($this->clock->now());
             $selectionHash = MaterialRepository::selectionHash($selection);
             $this->db->table('source_text_processings')->insert([
-                'public_id' => $publicId, 'workspace_id' => $context->workspaceId, 'source_id' => $source->id, 'item_id' => $item['id'],
+                'public_id' => $publicId, 'workspace_id' => $context->workspaceId, 'source_id' => $source?->id, 'item_id' => $item['id'],
                 'revision_hash' => $current, 'selection_hash' => $selectionHash, 'original_text' => $item['text'], 'mode' => $settings->mode,
                 'settings_version' => $version, 'settings_json' => json_encode($settings->form(), JSON_THROW_ON_ERROR), 'status' => 'processing',
                 'provider' => $this->text->providerName($settings), 'created_by' => $context->userId, 'created_at' => $now, 'updated_at' => $now,
@@ -56,26 +56,31 @@ final class ContentProcessor
         $output = null;
         $error = null;
         try {
-            $output = $this->text->process((string) $attempt['item']['text'], $attempt['messages'], $source->telegramUsername, $settings);
+            $output = $this->text->process((string) $attempt['item']['text'], $attempt['messages'], $source === null ? '' : $source->telegramUsername, $settings);
         } catch (Throwable) {
             $error = 'Обработка не удалась. Повторите попытку.';
         }
         return $this->db->transaction(function () use ($context, $source, $itemPublicId, $revision, $attempt, $output, $error): string {
-            $this->lock($context, $source);
+            $this->lock($context, $source, $itemPublicId);
             $item = $this->materials->item($context, $source, $itemPublicId);
             $messages = $this->materials->messages($context, $source, (int) $item['id']);
             $selection = $this->materials->selection($context, $source, (int) $item['id']);
             $stale = !hash_equals($revision, MaterialRepository::revision($item, $messages)) || !hash_equals($attempt['selection_hash'], MaterialRepository::selectionHash($selection)) || ($selection['selection_status'] ?? '') !== 'approved';
             $status = $stale ? 'stale' : ($error === null ? 'completed' : 'failed');
             $now = DbTime::format($this->clock->now());
-            $this->db->execute('UPDATE source_text_processings SET processed_text = ?, status = ?, error = ?, updated_at = ?, finished_at = ? WHERE workspace_id = ? AND source_id = ? AND public_id = ?', [$output, $status, $stale ? 'Материал или решение отбора изменились. Обработайте актуальную версию.' : $error, $now, $now, $context->workspaceId, $source->id, $attempt['public_id']]);
+            $this->db->execute('UPDATE source_text_processings SET processed_text = ?, status = ?, error = ?, updated_at = ?, finished_at = ? WHERE workspace_id = ? AND source_id <=> ? AND public_id = ?', [$output, $status, $stale ? 'Материал или решение отбора изменились. Обработайте актуальную версию.' : $error, $now, $now, $context->workspaceId, $source?->id, $attempt['public_id']]);
             $this->audit->record('source.text_' . $status, $context->userId, 'source_item', $itemPublicId, [], $context->workspaceId);
             return $status;
         });
     }
 
-    private function lock(WorkspaceContext $context, Source $source): void
+    private function lock(WorkspaceContext $context, ?Source $source, string $itemPublicId): void
     {
+        if ($source === null) {
+            $item = $this->materials->item($context, null, $itemPublicId);
+            $this->db->select('SELECT id FROM source_items WHERE workspace_id = ? AND id = ? FOR UPDATE', [$context->workspaceId, $item['id']]);
+            return;
+        }
         if ($this->db->select('SELECT id FROM sources WHERE workspace_id = ? AND id = ? FOR UPDATE', [$context->workspaceId, $source->id]) === []) {
             throw new HttpException(404, 'Not found');
         }

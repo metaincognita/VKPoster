@@ -61,6 +61,7 @@ final class StatsController
             'platforms_off' => $off,
             'storage' => $this->stats->storage(),
             'ai' => $this->stats->ai($from, $to),
+            'semantic_selection' => $this->stats->semanticSelection($from, $to),
             'source_text' => $this->stats->sourceText($from, $to),
         ]);
     }

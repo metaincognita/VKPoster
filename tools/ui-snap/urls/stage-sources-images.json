@@ -1,0 +1,10 @@
+[
+  {"name":"source-images-album-results","url":"/w/{ws}/sources","login_as":"image-ui@example.com","actions":[
+    {"click":"button[data-cookie-choice='necessary']"},
+    {"click":"main a:has-text('Image Processing UI')"},
+    {"click":"main a:has-text('Открыть материал') >> nth=0"},
+    {"click":"main a:has-text('Обработка изображений')"},
+    {"press":["body","End"]},
+    {"press":["body","Home"]}
+  ]}
+]

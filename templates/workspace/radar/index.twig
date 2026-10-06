@@ -1,0 +1,38 @@
+{% extends 'layouts/app.twig' %}
+{% import 'components/display.twig' as d %}
+{% import 'components/forms.twig' as f %}
+{% set nav_current = 'radar' %}
+{% set semantic_labels = {approved: 'Принят', rejected: 'Отклонён', needs_review: 'Требует проверки'} %}
+{% set statuses = {new: 'Новые', imported: 'Добавлены в материалы', ignored: 'Игнорируемые'} %}
+{% set score_labels = {freshness: 'Свежесть', independent_sources: 'Независимые источники', velocity: 'Скорость обнаружения', engagement: 'Просмотры и реакции', authority: 'Авторитетность', relative_growth: 'Относительный рост'} %}
+{% block title %}{{ t('Радар') }} · {{ app_name }}{% endblock %}
+{% block content %}
+{{ d.page_header(t('Радар'), t('Обнаруженные темы отдельно от ваших Sources. Проверьте материал перед обработкой.')) }}
+<div class="mt-5">{{ d.alert('info', t('Демонстрационные данные'), t('Telegram, Web/News и Social providers сейчас Fake. Радар использует синтетические fixtures, не обращается к внешним сервисам и не хранит полные тексты статей.')) }}</div>
+{% set semantic_body %}{% include 'workspace/sources/semantic-settings.twig' %}{% endset %}
+<div class="mt-5">{{ d.card(t('Смысловая релевантность'), body = semantic_body) }}</div>
+<div class="my-5 grid gap-4 sm:grid-cols-2">
+<form method="get" action="{{ base }}" class="grid gap-3">{{ f.select('status', t('Статус темы'), statuses, value = status) }}{{ f.select('ranking', t('Порядок тем'), {trend: t('По Trend Score'), semantic: t('По смысловой релевантности')}, value = ranking) }}<div>{{ f.button(t('Показать темы'), type = 'submit', variant = 'secondary') }}</div></form>
+{% if can('discovery.manage') %}<form method="post" action="{{ base }}/refresh" class="flex items-end" data-discovery-processing>{{ csrf_field() }}{{ f.button(t('Обновить радар'), type = 'submit') }}</form>{% endif %}
+</div>
+{% if clusters is empty %}{{ d.empty_state(t('Пока нет тем'), t('Обновите радар, чтобы автоматически обнаружить материалы из доступных providers. Ваши Sources для этого не нужны.'), icon = 'search') }}{% endif %}
+<div class="grid gap-5">
+{% for cluster in clusters %}{% set body %}
+<p>{{ d.badge(t(statuses[cluster.status] ?? 'Новые')) }} · {{ t('Trend score') }} <strong>{{ cluster.trend_score }}/100</strong> · {{ t('Источников') }}: {{ cluster.score.components.independent_sources.count }}</p>
+<p class="mt-2">{{ t('Semantic relevance') }}: {{ cluster.semantic_score is null ? t('Нет оценки') : cluster.semantic_score ~ '/100' }} · {{ t('Максимальный score материала в теме; не заменяет Trend Score.') }}</p>
+<p class="mt-2 text-sm text-muted">{{ t('Обнаружено') }} {{ cluster.discovered_at|date('d.m.Y H:i', workspace.timezone) }} · {{ workspace.timezone }}</p>
+<p class="mt-4 whitespace-pre-wrap break-words">{{ cluster.summary }}</p>
+<p class="mt-3 text-sm">{{ t('Доступность компонентов') }}: {{ cluster.score.coverage }}/100. {{ t('Неизвестные метрики не подставляются и не увеличивают рейтинг.') }}</p>
+<details class="mt-4"><summary>{{ t('Почему такой score') }}</summary><ul class="mt-3 grid gap-3">{% for key, component in cluster.score.components %}<li><strong>{{ t(score_labels[key]) }}:</strong> {{ component.value is null ? t('Нет данных') : component.value ~ '/' ~ component.weight }}<p class="text-sm text-muted">{{ component.reason }}</p>{% if component.known is defined %}<p class="text-sm text-muted">{{ t('Записей с данными') }}: {{ component.known }}</p>{% endif %}</li>{% endfor %}</ul></details>
+<h2 class="mt-5 font-semibold">{{ t('Основные источники') }}</h2><ul class="mt-3 grid gap-4">
+{% for item in cluster.items %}<li class="border-b border-line pb-4"><a class="text-link underline break-words" href="{{ item.canonical_url }}" target="_blank" rel="noopener noreferrer">{{ item.source_name }} · {{ item.title }}</a><p class="mt-1 text-sm text-muted">{{ item.source_type }} · {{ item.provider }}{% if item.published_at %} · {{ item.published_at|date('d.m.Y H:i', workspace.timezone) }} · {{ workspace.timezone }}{% else %} · {{ t('Дата публикации неизвестна') }}{% endif %}</p>
+{% if item.semantic %}<p class="mt-2 text-sm">{{ t('Semantic score') }}: {{ item.semantic.score is null ? t('Нет оценки') : item.semantic.score ~ '/100' }} · {{ t('Confidence') }}: {{ item.semantic.confidence ?? '—' }} · {{ t(semantic_labels[item.semantic.final_decision]) }}</p><p class="mt-1 text-sm">{{ item.semantic.final_reason }}</p>{% endif %}
+{% if item.material_public_id %}<p class="mt-3"><a class="text-link underline" href="{{ base }}/materials/{{ item.material_public_id }}">{{ t('Открыть материал') }}</a></p>{% elseif can('discovery.manage') and cluster.status != 'ignored' and item.status != 'ignored' %}<form method="post" action="{{ base }}/items/{{ item.public_id }}/import" class="mt-3" data-discovery-processing>{{ csrf_field() }}{{ f.button(t('Добавить в материалы'), type = 'submit', variant = 'secondary') }}</form>{% endif %}
+</li>{% endfor %}</ul>
+{% if can('discovery.manage') and cluster.status != 'ignored' %}<form method="post" action="{{ base }}/clusters/{{ cluster.public_id }}/ignore" class="mt-4" data-discovery-processing>{{ csrf_field() }}{{ f.button(t('Игнорировать'), type = 'submit', variant = 'secondary') }}</form>{% endif %}
+{% endset %}{{ d.card(cluster.title, body = body) }}{% endfor %}
+</div>
+{% set run_body %}{% if runs is empty %}<p class="text-muted">{{ t('Обнаружение ещё не запускалось') }}</p>{% else %}<ul class="grid gap-3">{% for run in runs %}<li><p>{{ run.provider }} · {{ t(run.status == 'completed' ? 'Завершено' : run.status == 'failed' ? 'Ошибка' : 'Выполняется') }} · {{ t('Найдено') }} {{ run.found_count }} · {{ t('Новых') }} {{ run.created_count }}</p>{% if run.error %}<p class="text-bad-fg" role="alert">{{ run.error }}</p>{% endif %}</li>{% endfor %}</ul>{% endif %}{% endset %}
+<div class="mt-5">{{ d.card(t('История обнаружения'), body = run_body) }}</div>
+<script src="{{ asset('js/sources.js') }}" nonce="{{ csp_nonce() }}" defer></script>
+{% endblock %}

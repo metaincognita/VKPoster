@@ -13,27 +13,30 @@ use App\Kernel\Exception\HttpException;
 final class MaterialRepository extends WorkspaceScopedRepository
 {
     /** @return array<string, mixed> */
-    public function item(WorkspaceContext $context, Source $source, string $publicId): array
+    public function item(WorkspaceContext $context, ?Source $source, string $publicId): array
     {
+        if ($source === null) {
+            return $this->db->select('SELECT i.* FROM source_items i JOIN discovery_imports l ON l.material_id = i.id AND l.workspace_id = i.workspace_id WHERE i.workspace_id = ? AND i.public_id = ? AND i.source_id IS NULL', [$context->workspaceId, $publicId])[0] ?? throw new HttpException(404, 'Not found');
+        }
         return $this->scoped($context, 'source_items')->where('source_id', '=', $source->id)->where('public_id', '=', $publicId)->first() ?? throw new HttpException(404, 'Not found');
     }
 
     /** @return list<array<string, mixed>> */
-    public function messages(WorkspaceContext $context, Source $source, int $itemId): array
+    public function messages(WorkspaceContext $context, ?Source $source, int $itemId): array
     {
-        return $this->db->select('SELECT message_id, text, entities_json, media_json, metadata_json, published_at, edited_at, revision_hash FROM source_messages WHERE workspace_id = ? AND source_id = ? AND item_id = ? ORDER BY message_id', [$context->workspaceId, $source->id, $itemId]);
+        return $this->db->select('SELECT message_id, text, entities_json, media_json, metadata_json, published_at, edited_at, revision_hash FROM source_messages WHERE workspace_id = ? AND source_id <=> ? AND item_id = ? ORDER BY message_id', [$context->workspaceId, $source?->id, $itemId]);
     }
 
     /** @return array<string, mixed>|null */
-    public function selection(WorkspaceContext $context, Source $source, int $itemId): ?array
+    public function selection(WorkspaceContext $context, ?Source $source, int $itemId): ?array
     {
-        return $this->scoped($context, 'source_selection_decisions')->where('source_id', '=', $source->id)->where('item_id', '=', $itemId)->first();
+        return $this->db->select('SELECT * FROM source_selection_decisions WHERE workspace_id = ? AND source_id <=> ? AND item_id = ?', [$context->workspaceId, $source?->id, $itemId])[0] ?? null;
     }
 
     /** @return list<array<string, mixed>> */
-    public function history(WorkspaceContext $context, Source $source, int $itemId): array
+    public function history(WorkspaceContext $context, ?Source $source, int $itemId): array
     {
-        return $this->db->select('SELECT * FROM source_text_processings WHERE workspace_id = ? AND source_id = ? AND item_id = ? ORDER BY id DESC LIMIT 50', [$context->workspaceId, $source->id, $itemId]);
+        return $this->db->select('SELECT * FROM source_text_processings WHERE workspace_id = ? AND source_id <=> ? AND item_id = ? ORDER BY id DESC LIMIT 50', [$context->workspaceId, $source?->id, $itemId]);
     }
 
     /**

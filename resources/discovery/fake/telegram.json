@@ -1,0 +1,24 @@
+[
+  {
+    "source_key": "demo.science",
+    "source_name": "Demo Science Telegram",
+    "url": "https://t.me/radar_fixture/101",
+    "external_id": "101",
+    "title": "Новый орбитальный телескоп обнаружил воду на экзопланете",
+    "excerpt": "Тестовый материал: орбитальный телескоп обнаружил воду на экзопланете. Данные проверяют исследователи.",
+    "hours_ago": 1,
+    "language": "ru",
+    "metadata": {
+      "author": "Demo science desk",
+      "authority": 0.7,
+      "authority_basis": "Синтетическая оценка fixture"
+    },
+    "engagement": {
+      "views": 3000,
+      "reactions": 30,
+      "baseline_views": 1000,
+      "baseline_comparable": true,
+      "window_hours": 6
+    }
+  }
+]

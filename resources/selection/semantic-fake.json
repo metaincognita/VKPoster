@@ -1,0 +1,35 @@
+[
+  {
+    "terms": [
+      "реклам",
+      "advertisement"
+    ],
+    "decision": "rejected",
+    "score": 10,
+    "confidence": 0.98,
+    "reason": "Демонстрация: совпала исключаемая рекламная категория fixture."
+  },
+  {
+    "terms": [
+      "неясн",
+      "uncertain"
+    ],
+    "decision": "needs_review",
+    "score": 55,
+    "confidence": 0.45,
+    "reason": "Демонстрация: неоднозначный материал fixture."
+  },
+  {
+    "terms": [
+      "ai",
+      "технолог",
+      "technology",
+      "телескоп",
+      "battery"
+    ],
+    "decision": "approved",
+    "score": 90,
+    "confidence": 0.95,
+    "reason": "Демонстрация: совпала технологическая категория fixture."
+  }
+]

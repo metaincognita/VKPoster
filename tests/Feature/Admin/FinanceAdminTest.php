@@ -123,8 +123,8 @@ final class FinanceAdminTest extends AdminTestCase
     {
         [$owner, $workspace] = $this->ownerWithWorkspace('filter@example.com', 'Фильтр');
         [, $payment] = $this->payWithFake($workspace, $owner);
-        $this->staff(StaffRole::Finance);
-        $today = $this->clock->now()->format('Y-m-d');
+        $staff = $this->staff(StaffRole::Finance);
+        $today = $this->clock->now()->setTimezone(new \DateTimeZone($staff->timezone))->format('Y-m-d');
         self::assertStringContainsString($payment->publicId, $this->get('/admin/payments?provider=fake&from=' . $today . '&to=' . $today)->body);
         self::assertStringNotContainsString($payment->publicId, $this->get('/admin/payments?provider=tbank')->body);
         self::assertStringNotContainsString($payment->publicId, $this->get('/admin/payments?from=2000-01-01&to=2000-01-31')->body);
@@ -147,9 +147,9 @@ final class FinanceAdminTest extends AdminTestCase
     {
         [$owner, $workspace] = $this->ownerWithWorkspace('books@example.com', 'Бухгалтерия');
         [$invoice] = $this->payWithFake($workspace, $owner);
-        $this->staff(StaffRole::Finance);
-        $from = $this->clock->now()->modify('-1 day')->format('Y-m-d');
-        $to = $this->clock->now()->format('Y-m-d');
+        $staff = $this->staff(StaffRole::Finance);
+        $from = $this->clock->now()->setTimezone(new \DateTimeZone($staff->timezone))->modify('-1 day')->format('Y-m-d');
+        $to = $this->clock->now()->setTimezone(new \DateTimeZone($staff->timezone))->format('Y-m-d');
 
         $csv = $this->get('/admin/payments/export?from=' . $from . '&to=' . $to);
         self::assertSame(200, $csv->status);

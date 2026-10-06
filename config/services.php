@@ -343,6 +343,17 @@ return static function (Container $c, string $base): void {
 
     $c->factory(\App\Integrations\Ai\TextProvider::class, static fn (Container $c): \App\Integrations\Ai\TextProvider => new \App\Integrations\Ai\FakeTextProvider(!$c->get(Config::class)->isProduction()));
 
+    $c->factory(\App\Integrations\Selection\SemanticSelectionProvider::class, static fn (Container $c): \App\Integrations\Selection\SemanticSelectionProvider => new \App\Integrations\Selection\FakeSemanticSelectionProvider(!$c->get(Config::class)->isProduction()));
+    $c->factory(\App\Integrations\Discovery\DiscoveryProviders::class, static fn (Container $c): \App\Integrations\Discovery\DiscoveryProviders => new \App\Integrations\Discovery\DiscoveryProviders([
+        new \App\Integrations\Discovery\FakeTelegramDiscoveryProvider(!$c->get(Config::class)->isProduction()),
+        new \App\Integrations\Discovery\FakeWebNewsDiscoveryProvider(!$c->get(Config::class)->isProduction()),
+        new \App\Integrations\Discovery\FakeSocialDiscoveryProvider(!$c->get(Config::class)->isProduction()),
+    ]));
+
+    $c->factory(\App\Integrations\Video\VideoProvider::class, static fn (Container $c): \App\Integrations\Video\VideoProvider => new \App\Integrations\Video\FakeVideoProvider(!$c->get(Config::class)->isProduction()));
+    $c->factory(\App\Integrations\Images\ImageSearchProvider::class, static fn (): \App\Integrations\Images\ImageSearchProvider => new \App\Integrations\Images\FakeImageSearchProvider());
+    $c->factory(\App\Integrations\Images\ImageEnhancementProvider::class, static fn (Container $c): \App\Integrations\Images\ImageEnhancementProvider => new \App\Integrations\Images\FakeImageEnhancementProvider(!$c->get(Config::class)->isProduction()));
+
     $c->factory(HealthCheck::class, static fn (Container $c): HealthCheck => new HealthCheck($c->get(Config::class)->env()->all()));
 
     $c->factory(Schedule::class, static function (Container $c) use ($base): Schedule {

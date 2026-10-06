@@ -1,0 +1,8 @@
+[
+  {"name":"source-video-jobs","url":"/w/{ws}/sources","login_as":"video-ui@example.com","actions":[
+    {"click":"button[data-cookie-choice='necessary']"},
+    {"click":"main a:has-text('Video Generation UI')"},
+    {"click":"main a:has-text('Открыть материал') >> nth=0"},
+    {"click":"main a:has-text('Генерация видео')"}
+  ]}
+]

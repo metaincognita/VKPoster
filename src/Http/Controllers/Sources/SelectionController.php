@@ -42,6 +42,22 @@ final class SelectionController
         return Response::redirect($this->url($request, $source));
     }
 
+    public function semantic(Request $request): Response
+    {
+        $source = $this->source($request);
+        try {
+            $this->selection->saveSemantic(WorkspaceRequest::context($request), $source, \App\Domain\Source\Selection\SemanticSettings::fromInput($request->body));
+            $this->flash->toast('Смысловые настройки сохранены. Ручные решения сохранены.');
+        } catch (SourceException $e) {
+            $safe = [];
+            foreach (['enabled', 'criteria', 'min_score', 'min_confidence', 'uncertain_mode'] as $key) {
+                $safe[$key] = is_string($request->body[$key] ?? null) ? mb_substr($request->body[$key], 0, 4000) : '';
+            }
+            $this->flash->invalid($safe, [$e->field => [$e->getMessage()]]);
+        }
+        return Response::redirect($this->url($request, $source));
+    }
+
     public function decide(Request $request): Response
     {
         $source = $this->source($request);

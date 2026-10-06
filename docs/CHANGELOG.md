@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 ### Added
+- Sources 2.5: Content Discovery / Trend Radar Core с Fake Telegram/WebNews/Social providers, дедупликацией, эвристической кластеризацией, объяснимым Trend Score и импортом через отдельную границу в существующий content flow. Реальные API, постоянный polling и publishing не подключены.
+- Sources 2.4C: Video Generation Core с отдельным VideoProvider, Fake lifecycle без видеофайла, snapshots настроек и основ, историей заданий, выбором результата и UI.
+- Sources 2.6: optional Semantic Selection поверх существующих правил, отдельная revision/policy history, thresholds score/confidence и manual priority; Fake provider без AI API. Source/материал/Радар UI показывает semantic relevance отдельно от Trend Score; защищённая операционная статистика хранит только counts.
+- Sources 2.4B: отдельная обработка фото approved materials, reader image jobs/durable outbox/HTTP ACK, immutable originals, техническое качество и perceptual/visual verification, private previews и UI ручного выбора. Search и enhancement — заменяемые Fake providers; без PostDraft/publishing. Исправлено вычисление локальных дат в трёх старых test scenarios (billing/admin/workspace бизнес-код не менялся).
+
 - Sources 2.4A: отдельная обработка текста current approved материалов, версионированные настройки и история попыток/ошибок, revision guards до/после provider, UI материала. Пять режимов через автономный Fake provider; локальный unchanged, детерминированные ограничения, audit/технические метрики. Реальный AI, медиа и publishing не подключены.
 - Sources (подэтап 2.3): отдельные таблицы правил и решений, детерминированные фильтры слов/хэштегов/ссылок/типов/пересылок, причины и snapshot правил, ручное принятие/отклонение с приоритетом, фильтр в полученных материалах. Без AI, обработки и publishing; reader не изменён.
 - Sources (подэтап 2.2): внутренний HTTP API с отдельным секретом, транзакционные входящие события/items/messages, дедупликация и edits/альбомы; multi-source reader с одной session и durable outbox; раздел «Полученные материалы». Без AI, медиатеки и публикации.
@@ -46,3 +51,11 @@
 
 ### Removed
 - Весь legacy-код (остался в теге `legacy-v0`), `vendor/` больше не коммитится.
+
+## 2026-10-06 — Source Video Generation Core (2.4C)
+
+Separate provider-neutral video jobs, approved/revision/basis guards, versioned snapshots and retained history, safe errors, manual result selection and workspace UI. Fake demonstrates pending/processing/completed/failed without video files or network access. Publishing and reader unchanged.
+
+## 2026-10-06 — Content Discovery / Trend Radar Core (2.5)
+
+Independent Fake Telegram/WebNews/Social metadata discovery, canonical dedupe, heuristic story clusters, transparent six-component 0–100 scoring, Radar UI, ignore/import and explicit current-approved content-processing boundary. No commercial APIs, protected article bodies, AI or publishing.

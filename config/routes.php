@@ -89,6 +89,8 @@ use App\Kernel\Http\Router;
 return static function (Router $router): void {
     $router->get('/', [HomeController::class, 'index'])->name('home')->middleware(TrackVisit::class, OptionalAuthenticate::class);
     $router->get('/healthz', [HealthController::class, 'show'])->name('health');
+    $router->get('/internal/source-image-jobs', [\App\Http\Controllers\Sources\ImageReaderController::class, 'jobs'])->middleware([RateLimit::class, ['bucket' => 'source-images-list', 'max' => 120, 'seconds' => 60]]);
+    $router->post('/internal/source-image-results', [\App\Http\Controllers\Sources\ImageReaderController::class, 'result'])->withoutCsrf()->middleware([RateLimit::class, ['bucket' => 'source-images-results', 'max' => 60, 'seconds' => 60]]);
     $router->get('/internal/sources', [SourceReaderController::class, 'sources'])->middleware([RateLimit::class, ['bucket' => 'source-reader-list', 'max' => 120, 'seconds' => 60]]);
     $router->post('/internal/source-events', [SourceReaderController::class, 'event'])->withoutCsrf()->middleware([RateLimit::class, ['bucket' => 'source-reader-events', 'max' => 600, 'seconds' => 60]]);
 
@@ -243,6 +245,18 @@ return static function (Router $router): void {
                 $m->post($mark . '/update', [WatermarkController::class, 'update']);
                 $m->post($mark . '/delete', [WatermarkController::class, 'delete']);
             });
+            $w->group('/radar', [[Authorize::class, ['permission' => 'discovery.view']]], static function (Router $r) use ($ulid): void {
+                $r->get('', [\App\Http\Controllers\Discovery\RadarController::class, 'index']);
+                $r->get('/materials/{itemId:' . $ulid . '}', [\App\Http\Controllers\Discovery\RadarController::class, 'material']);
+                $r->group('', [[Authorize::class, ['permission' => 'discovery.manage']]], static function (Router $m) use ($ulid): void {
+                    $m->post('/semantic-settings', [\App\Http\Controllers\Discovery\RadarController::class, 'semantic'])->middleware([RateLimit::class, ['bucket' => 'semantic-settings', 'max' => 10, 'seconds' => 60]]);
+                    $m->post('/refresh', [\App\Http\Controllers\Discovery\RadarController::class, 'refresh'])->middleware([RateLimit::class, ['bucket' => 'discovery-refresh', 'max' => 5, 'seconds' => 60]]);
+                    $m->post('/items/{discoveryId:' . $ulid . '}/import', [\App\Http\Controllers\Discovery\RadarController::class, 'import']);
+                    $m->post('/clusters/{clusterId:' . $ulid . '}/ignore', [\App\Http\Controllers\Discovery\RadarController::class, 'ignore']);
+                    $m->post('/materials/{itemId:' . $ulid . '}/selection', [\App\Http\Controllers\Discovery\RadarController::class, 'decide']);
+                    $m->post('/materials/{itemId:' . $ulid . '}/process', [\App\Http\Controllers\Discovery\RadarController::class, 'process'])->middleware([RateLimit::class, ['bucket' => 'discovery-processing', 'max' => 30, 'seconds' => 60]]);
+                });
+            });
             // Sources and selection remain separate from the publishing pipeline.
             $w->group('/sources', [[Authorize::class, ['permission' => 'sources.view']]], static function (Router $s) use ($ulid): void {
                 $s->get('', [SourceController::class, 'index'])->name('workspace.sources');
@@ -252,9 +266,18 @@ return static function (Router $router): void {
                     $m->get('/{sourceId:' . $ulid . '}/edit', [SourceController::class, 'edit']);
                     $m->post('/{sourceId:' . $ulid . '}', [SourceController::class, 'update']);
                     $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/process', [\App\Http\Controllers\Sources\ProcessingController::class, 'process'])->middleware([RateLimit::class, ['bucket' => 'source-text-processing', 'max' => 30, 'seconds' => 60]]);
+                    $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/images', [\App\Http\Controllers\Sources\ImageProcessingController::class, 'request'])->middleware([RateLimit::class, ['bucket' => 'source-images-request', 'max' => 10, 'seconds' => 60]]);
+                    $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/images/select', [\App\Http\Controllers\Sources\ImageProcessingController::class, 'choose']);
+                    $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/videos', [\App\Http\Controllers\Sources\VideoProcessingController::class, 'request'])->middleware([RateLimit::class, ['bucket' => 'source-video-request', 'max' => 10, 'seconds' => 60]]);
+                    $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/videos/run', [\App\Http\Controllers\Sources\VideoProcessingController::class, 'run'])->middleware([RateLimit::class, ['bucket' => 'source-video-run', 'max' => 10, 'seconds' => 60]]);
+                    $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/videos/select', [\App\Http\Controllers\Sources\VideoProcessingController::class, 'choose'])->middleware([RateLimit::class, ['bucket' => 'source-video-choose', 'max' => 10, 'seconds' => 60]]);
+                    $m->post('/{sourceId:' . $ulid . '}/semantic-settings', [\App\Http\Controllers\Sources\SelectionController::class, 'semantic'])->middleware([RateLimit::class, ['bucket' => 'semantic-settings', 'max' => 10, 'seconds' => 60]]);
                     $m->post('/{sourceId:' . $ulid . '}/selection-rules', [\App\Http\Controllers\Sources\SelectionController::class, 'rules']);
                     $m->post('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/selection', [\App\Http\Controllers\Sources\SelectionController::class, 'decide']);
                 });
+                $s->get('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/videos', [\App\Http\Controllers\Sources\VideoProcessingController::class, 'show']);
+                $s->get('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/images', [\App\Http\Controllers\Sources\ImageProcessingController::class, 'show']);
+                $s->get('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}/images/{variantId:' . $ulid . '}/preview', [\App\Http\Controllers\Sources\ImageProcessingController::class, 'preview']);
                 $s->get('/{sourceId:' . $ulid . '}/items/{itemId:' . $ulid . '}', [\App\Http\Controllers\Sources\ProcessingController::class, 'show']);
                 $s->get('/{sourceId:' . $ulid . '}', [SourceController::class, 'show'])->name('workspace.sources.show');
             });

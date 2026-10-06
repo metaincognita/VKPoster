@@ -1,0 +1,40 @@
+[
+  {
+    "name": "radar-cluster",
+    "url": "/w/{ws}/radar?status=imported",
+    "login_as": "radar-ui@example.com",
+    "actions": [
+      {
+        "click": "button[data-cookie-choice='necessary']"
+      },
+      {
+        "click": "main summary:has-text('Почему такой score')"
+      },
+      {
+        "press": [
+          "body",
+          "Home"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "radar-material",
+    "url": "/w/{ws}/radar?status=imported",
+    "login_as": "radar-ui@example.com",
+    "actions": [
+      {
+        "click": "button[data-cookie-choice='necessary']"
+      },
+      {
+        "click": "main a:has-text('Открыть материал')"
+      },
+      {
+        "press": [
+          "body",
+          "Home"
+        ]
+      }
+    ]
+  }
+]

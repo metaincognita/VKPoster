@@ -1,0 +1,13 @@
+{% import 'components/display.twig' as sd %}
+{% import 'components/forms.twig' as sf %}
+{{ sd.alert('info', t('Смысловой отбор — Fake provider'), t('Это демонстрация структурированных решений по fixtures. Реальное понимание произвольных критериев и AI API пока не подключены. Ручное решение всегда имеет приоритет.')) }}
+{% if can(semantic_permission) %}
+<form method="post" action="{{ semantic_url }}" class="mt-4 grid gap-4" data-source-form data-semantic-selection>
+{{ csrf_field() }}
+{{ sf.select('enabled', t('Смысловой отбор'), {'0': t('Выключен'), '1': t('Включён')}, value = old('enabled', semantic_settings.enabled ? '1' : '0'), error = errors('enabled')|first) }}
+{{ sf.textarea('criteria', t('Какие материалы вам нужны'), value = old('criteria', semantic_settings.criteria), max = 4000, error = errors('criteria')|first, hint = t('Опишите темы и исключения. Fake fixtures: AI / технологии, реклама, неясные события.')) }}
+{{ sf.input('min_score', t('Минимальный semantic score'), type = 'number', value = old('min_score', semantic_settings.min_score), required = true, error = errors('min_score')|first, attrs = {min: 0, max: 100, step: 1}) }}
+{{ sf.input('min_confidence', t('Минимальная уверенность'), type = 'number', value = old('min_confidence', semantic_settings.min_confidence), required = true, error = errors('min_confidence')|first, attrs = {min: 0, max: 1, step: '0.0001'}) }}
+{{ sf.select('uncertain_mode', t('Сомнительные материалы'), {review: t('Отправлять на ручную проверку'), reject: t('Отклонять')}, value = old('uncertain_mode', semantic_settings.uncertain_mode), error = errors('uncertain_mode')|first, hint = t('Попытки изменить инструкции внутри поста всегда требуют проверки.')) }}
+<div>{{ sf.button(t('Сохранить смысловые настройки'), type = 'submit') }}</div>
+</form>{% else %}<p class="mt-3">{{ semantic_settings.enabled ? t('Смысловой отбор включён') : t('Смысловой отбор выключен') }}</p>{% endif %}

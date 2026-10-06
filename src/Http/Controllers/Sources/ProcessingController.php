@@ -20,7 +20,7 @@ use App\Kernel\View\View;
 /** Material detail and CSRF-protected text processing endpoints; domain owns approval and revision checks. */
 final class ProcessingController
 {
-    public function __construct(private readonly SourceRepository $sources, private readonly MaterialRepository $materials, private readonly ContentProcessor $processor, private readonly View $view, private readonly FormFlash $flash)
+    public function __construct(private readonly SourceRepository $sources, private readonly MaterialRepository $materials, private readonly ContentProcessor $processor, private readonly View $view, private readonly FormFlash $flash, private readonly \App\Domain\Source\Selection\SemanticSelection $semantic, private readonly \App\Domain\Source\Selection\SelectionService $selectionService)
     {
     }
 
@@ -37,8 +37,14 @@ final class ProcessingController
             $attempt['current'] = $attempt['status'] === 'completed' && $attempt['revision_hash'] === $revision && $attempt['selection_hash'] === $selectionHash && ($selection['selection_status'] ?? '') === 'approved';
         }
         unset($attempt);
+        $deterministic = $this->selectionService->deterministic($context->workspaceId, $source->id, $item, $this->materials->messages($context, $source, (int) $item['id']));
         return $this->view->response('workspace/sources/item.twig', ['workspace' => $context, 'source' => $source, 'material' => $item,
             'base' => '/w/' . $context->workspacePublicId . '/sources', 'history' => $history, 'revision' => $revision,
+            'deterministic' => $deterministic,
+            'semantic_current' => $this->semantic->current($context->workspaceId, $source->id, 'material', (int) $item['id'], $revision, $deterministic),
+            'semantic_history' => $this->semantic->history($context->workspaceId, 'material', (int) $item['id']),
+            'semantic_enabled' => $this->semantic->settings($context->workspaceId, $source->id)['settings']->enabled,
+            'selection_detail' => $selection,
             'selection_status' => $selection['selection_status'] ?? 'needs_review',
             'settings' => $history === [] ? TextSettings::fromInput([])->form() : json_decode((string) $history[0]['settings_json'], true, 32, JSON_THROW_ON_ERROR)]);
     }

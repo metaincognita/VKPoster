@@ -70,12 +70,12 @@ final class TextProcessor
 
     private function sourceUrl(string $url, string $username): bool
     {
-        return preg_match('~^https?://(?:t\.me|telegram\.me)/' . preg_quote($username, '~') . '(?:[/#?]|$)~iu', $url) === 1;
+        return $username !== '' && preg_match('~^https?://(?:t\.me|telegram\.me)/' . preg_quote($username, '~') . '(?:[/#?]|$)~iu', $url) === 1;
     }
 
     private function constrain(string $text, string $username, TextSettings $settings, bool $limit): string
     {
-        if (!$settings->keepSource) {
+        if (!$settings->keepSource && $username !== '') {
             $text = preg_replace('~(?<![\pL\pN_])@' . preg_quote($username, '~') . '(?![\pL\pN_])|(?:https?://)?(?:t\.me|telegram\.me)/' . preg_quote($username, '~') . '(?![\pL\pN_])[^\s]*~iu', '', $text) ?? $text;
         }
         if (!$settings->keepLinks) {

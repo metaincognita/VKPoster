@@ -1,26 +1,33 @@
 {% extends 'layouts/app.twig' %}
 {% import 'components/display.twig' as d %}
 {% import 'components/forms.twig' as f %}
-{% set nav_current = 'sources' %}
+{% set is_discovery = material_origin is defined and material_origin == 'discovery' %}
+{% set nav_current = is_discovery ? 'radar' : 'sources' %}
+{% set material_url = material_base is defined ? material_base : base ~ '/' ~ source.publicId ~ '/items/' ~ material.public_id %}
 {% set mode_labels = {unchanged: 'Без изменений', edit: 'Лёгкая редактура', rewrite: 'Переписать', shorten: 'Сократить', custom: 'Пользовательская инструкция'} %}
 {% set status_labels = {processing: 'Обрабатывается', completed: 'Готово', failed: 'Ошибка', stale: 'Устаревшая попытка'} %}
 {% block title %}{{ t('Обработка текста') }} · {{ app_name }}{% endblock %}
 {% block content %}
-{{ d.breadcrumbs([{label: t('Источники'), href: base}, {label: source.name, href: base ~ '/' ~ source.publicId}, {label: t('Обработка текста')}]) }}
+{% if is_discovery %}{{ d.breadcrumbs([{label: t('Радар'), href: base}, {label: t('Обработка текста')}]) }}{% else %}{{ d.breadcrumbs([{label: t('Источники'), href: base}, {label: source.name, href: base ~ '/' ~ source.publicId}, {label: t('Обработка текста')}]) }}{% endif %}
 <div class="mt-3">{{ d.page_header(t('Обработка текста'), t('Каждая попытка сохраняется отдельно. Исходный материал остаётся без изменений.')) }}</div>
+{% if not is_discovery %}<p class="my-5"><a class="text-link underline" href="{{ base }}/{{ source.publicId }}/items/{{ material.public_id }}/images">{{ t('Обработка изображений') }}</a></p>
+<p class="my-5"><a class="text-link underline" href="{{ base }}/{{ source.publicId }}/items/{{ material.public_id }}/videos">{{ t('Генерация видео') }}</a></p>
+{% endif %}
+{% if is_discovery %}<div class="my-5">{{ d.alert('info', t('Материал из радара'), selection_reason) }}</div>{% if can('discovery.manage') %}<div class="my-5 flex flex-wrap gap-3">{% for choice, label in {approve: 'Принять', reject: 'Отклонить'} %}<form method="post" action="{{ material_url }}/selection" data-discovery-processing>{{ csrf_field() }}<input type="hidden" name="decision" value="{{ choice }}">{{ f.button(t(label), type = 'submit', variant = 'secondary') }}</form>{% endfor %}</div>{% endif %}{% endif %}
+{% if deterministic is defined %}{% include 'workspace/sources/semantic-decision.twig' %}{% endif %}
 {% set original %}<p class="break-words whitespace-pre-wrap">{{ material.text }}</p>{% if material.text is empty %}<p class="text-muted">{{ t('В материале нет текста') }}</p>{% endif %}{% endset %}
 {{ d.card(t('Исходный текст'), body = original) }}
 {% set controls %}
 {{ d.alert('info', t('Демонстрационный провайдер'), t('Режимы редакции используют Fake provider: перевод и смысловое выполнение инструкции пока не подключены. Без изменений работает локально. Ограничения длины, ссылок, упоминаний и запрещённых фраз применяются во всех режимах.')) }}
-{% if selection_status != 'approved' %}<p class="mt-4">{{ t('Для обработки сначала примите материал на странице источника.') }}</p>{% endif %}
-{% if can('sources.manage') %}
-<form method="post" action="{{ base }}/{{ source.publicId }}/items/{{ material.public_id }}/process" class="mt-4 grid gap-5" data-source-form data-text-processing>
+{% if selection_status != 'approved' %}<p class="mt-4">{{ t(is_discovery ? 'Для обработки сначала примите материал.' : 'Для обработки сначала примите материал на странице источника.') }}</p>{% endif %}
+{% if can(processing_permission|default('sources.manage')) %}
+<form method="post" action="{{ material_url }}/process" class="mt-4 grid gap-5" data-source-form data-text-processing>
 {{ csrf_field() }}<input type="hidden" name="revision" value="{{ revision }}">
 {{ f.select('mode', t('Режим обработки'), mode_labels, value = old('mode', settings.mode), error = errors('mode')|first) }}
 {{ f.select('language', t('Язык результата'), {original: t('Язык оригинала'), ru: t('Русский'), en: t('Английский'), uk: t('Украинский'), de: t('Немецкий'), fr: t('Французский'), es: t('Испанский')}, value = old('language', settings.language), error = errors('language')|first) }}
 {{ f.input('max_length', t('Максимальная длина'), type = 'number', value = old('max_length', settings.max_length), error = errors('max_length')|first, required = true, attrs = {min: 1, max: 20000}) }}
 {{ f.select('links', t('Ссылки'), {keep: t('Сохранить'), remove: t('Удалить')}, value = old('links', settings.links), error = errors('links')|first, hint = t('Результат — обычный текст. При сохранении скрытых ссылок адрес добавляется после подписи.')) }}
-{{ f.select('source_mentions', t('Упоминания источника'), {keep: t('Сохранить'), remove: t('Удалить')}, value = old('source_mentions', settings.source_mentions), error = errors('source_mentions')|first, hint = t('Учитываются @username и ссылки на текущий источник. Упоминания других каналов сохраняются.')) }}
+{% if not is_discovery %}{{ f.select('source_mentions', t('Упоминания источника'), {keep: t('Сохранить'), remove: t('Удалить')}, value = old('source_mentions', settings.source_mentions), error = errors('source_mentions')|first, hint = t('Учитываются @username и ссылки на текущий источник. Упоминания других каналов сохраняются.')) }}{% else %}<input type="hidden" name="source_mentions" value="keep">{% endif %}
 {{ f.textarea('instruction', t('Пользовательская инструкция'), value = old('instruction', settings.instruction), max = 4000, error = errors('instruction')|first) }}
 {{ f.textarea('forbidden', t('Запрещённые слова и фразы'), value = old('forbidden', settings.forbidden), max = 10000, hint = t('Одна фраза на строку. Совпадения удаляются без учёта регистра, в том числе внутри слов.'), error = errors('forbidden')|first) }}
 <div>{{ f.button(t('Обработать'), type = 'submit', disabled = selection_status != 'approved') }}</div>

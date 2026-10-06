@@ -1,0 +1,17 @@
+{% import 'components/display.twig' as sd %}
+{% import 'components/forms.twig' as f %}
+{% set decision_labels = {approved: 'Принят', rejected: 'Отклонён', needs_review: 'Требует проверки'} %}
+{% set selection_body %}
+<p><strong>{{ t('Детерминированное решение') }}:</strong> {{ t(decision_labels[deterministic.status]) }}</p>
+<p class="mt-2 text-sm">{{ deterministic.reason }}</p>
+<p class="mt-3"><strong>{{ t('Смысловое решение') }}:</strong> {% if not semantic_enabled %}{{ t('Выключено') }}{% elseif semantic_current is null %}{{ t('Нет оценки текущей ревизии') }}{% elseif semantic_current.status == 'blocked' %}{{ t('Не запускалось: детерминированные правила не разрешили материал') }}{% elseif semantic_current.status == 'failed' %}{{ t('Ошибка оценки') }}{% else %}{{ t(decision_labels[semantic_current.decision]) }}{% endif %}</p>
+{% if semantic_current %}{% if semantic_current.score is not null %}<p class="mt-2">{{ t('Semantic score') }}: {{ semantic_current.score }}/100 · {{ t('Confidence') }}: {{ semantic_current.confidence }} · {{ t('Fake provider') }}</p>{% endif %}
+{% if semantic_current.reason %}<p class="mt-2 text-sm">{{ semantic_current.reason }}</p>{% endif %}{% if semantic_current.error %}<p class="mt-2 text-bad-fg" role="alert">{{ semantic_current.error }}</p>{% endif %}
+{% if semantic_current.matched_criteria %}<p class="mt-2 text-sm break-words">{{ t('Совпавшие критерии') }}: {{ semantic_current.matched_criteria|join(', ') }}</p>{% endif %}
+{% if semantic_current.review_flags %}<p class="mt-2 text-sm break-words">{{ t('Признаки для проверки') }}: {{ semantic_current.review_flags|join(', ') }}</p>{% endif %}{% endif %}
+<p class="mt-4"><strong>{{ t('Итоговое решение') }}:</strong> {{ sd.badge(t(decision_labels[selection_status])) }}{% if selection_detail.decision_mode|default('') == 'manual' %} · {{ t('Ручное решение имеет приоритет') }}{% endif %}</p>
+<p class="mt-2 text-sm">{{ selection_detail.reason|default('') }}</p>
+{% if not is_discovery and can('sources.manage') %}<form method="post" action="{{ material_url }}/selection" class="mt-3 flex flex-wrap gap-3" data-source-form>{{ csrf_field() }}
+{{ f.button(t('Принять'), type = 'submit', attrs = {name: 'decision', value: 'approved'}) }}{{ f.button(t('Отклонить'), type = 'submit', variant = 'secondary', attrs = {name: 'decision', value: 'rejected'}) }}</form>{% endif %}
+{% if semantic_history is not empty %}<details class="mt-4"><summary>{{ t('История смысловых оценок') }}</summary><ul class="mt-3 grid gap-3">{% for evaluation in semantic_history %}<li class="border-b border-line pb-3"><p>{{ evaluation.created_at|date('d.m.Y H:i', workspace.timezone) }} · {{ workspace.timezone }} · {{ t('Версия настроек') }} {{ evaluation.settings_version }} · {{ t(decision_labels[evaluation.final_decision]) }}</p><p class="text-sm">{{ evaluation.final_reason }}</p><p class="text-xs text-muted break-all">{{ t('Ревизия') }}: {{ evaluation.revision_hash }}</p></li>{% endfor %}</ul></details>{% endif %}
+{% endset %}<div class="my-5">{{ sd.card(t('Отбор материала'), body = selection_body) }}</div>

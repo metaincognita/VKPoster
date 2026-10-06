@@ -14,6 +14,22 @@ final class AuditActions
 {
     /** @var array<string, string> */
     private const LABELS = [
+        'source.images_requested' => 'Запрошена обработка изображений',
+        'source.images_completed' => 'Изображения сохранены',
+        'source.images_failed' => 'Ошибка обработки изображений',
+        'source.images_stale' => 'Попытка обработки изображений устарела',
+        'source.image_selected' => 'Выбрана версия изображения',
+        'selection.semantic_settings_updated' => 'Обновлены настройки смыслового отбора',
+        'discovery.refreshed' => 'Радар обновлён',
+        'discovery.ignored' => 'Тема радара проигнорирована',
+        'discovery.imported' => 'Материал радара импортирован',
+        'discovery.material_approved' => 'Материал радара принят',
+        'discovery.material_rejected' => 'Материал радара отклонён',
+        'source.video_requested' => 'Создано задание генерации видео',
+        'source.video_started' => 'Начата генерация видео',
+        'source.video_completed' => 'Генерация видео завершена',
+        'source.video_failed' => 'Ошибка генерации видео',
+        'source.video_selected' => 'Выбрана итоговая версия видео',
         'source.text_started' => 'Начата обработка текста',
         'source.text_completed' => 'Текст обработан',
         'source.text_failed' => 'Ошибка обработки текста',

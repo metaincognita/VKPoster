@@ -23,6 +23,8 @@ return static fn (Env $env): array => [
     'members.manage' => ['owner', 'admin'],
     'channels.manage' => ['owner', 'admin'],
     // Source configuration has no per-source access lists in the initial skeleton.
+    'discovery.view' => ['owner', 'admin'],
+    'discovery.manage' => ['owner', 'admin'],
     'sources.view' => ['owner', 'admin'],
     'sources.manage' => ['owner', 'admin'],
     // The channel list (a restricted member sees only the channels assigned to them); clients work through the calendar only.

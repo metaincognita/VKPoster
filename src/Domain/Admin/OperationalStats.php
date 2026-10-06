@@ -202,6 +202,16 @@ final class OperationalStats
         return $counts;
     }
 
+    /** @return array<string,int> Semantic counts only; no post contents, criteria, provider payloads or secrets. */
+    public function semanticSelection(DateTimeImmutable $from, DateTimeImmutable $to): array
+    {
+        $counts = ['completed' => 0, 'failed' => 0, 'blocked' => 0];
+        foreach ($this->db->select('SELECT status, COUNT(*) AS c FROM semantic_selection_evaluations WHERE created_at >= ? AND created_at < ? GROUP BY status', [DbTime::format($from), DbTime::format($to)]) as $row) {
+            $counts[(string) $row['status']] = (int) $row['c'];
+        }
+        return $counts;
+    }
+
     /**
      * Nearest-rank percentile of an ascending list (0 for an empty one).
      *
