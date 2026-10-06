@@ -97,3 +97,5 @@
 `config/content_providers.php` reads `CONTENT_TEXT_PROVIDER`, `CONTENT_SEMANTIC_PROVIDER` (fake/openai), `CONTENT_IMAGE_SEARCH_PROVIDER` (fake/tineye), `CONTENT_IMAGE_ENHANCEMENT_PROVIDER` (fake/disabled/replicate), `CONTENT_VIDEO_PROVIDER` (fake/replicate). All default to fake. Credentials: `OPENAI_API_KEY`, `TINEYE_API_KEY`, `REPLICATE_API_TOKEN`; configurable `OPENAI_CONTENT_MODEL`. See [real provider operations](modules/content-real-providers.md).
 
 Stage 3.2 is accepted on mocked HTTP/contracts. Real integrations need explicit selection plus corresponding env credentials; absent credentials prevent activation. OpenAI/TinEye/Replicate live smoke is deferred to Stage 3.5; Fake remains the dev/test default.
+
+Content hardening env: `CONTENT_CONCURRENCY=2`, `CONTENT_PROVIDER_PER_MINUTE=20`, `CONTENT_VIDEO_PER_HOUR=3`, `CONTENT_VIDEO_PENDING=3`, `CONTENT_STUCK_SECONDS=3600`; cleanup disabled via `CONTENT_RETENTION_ENABLED=false`, `CONTENT_RETENTION_DAYS=30`. Reader independently defaults `READER_ACK_RETENTION_DAYS=0`. See [limits/recovery/retention](modules/content-hardening.md).

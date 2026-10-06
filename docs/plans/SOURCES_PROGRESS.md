@@ -33,7 +33,7 @@
 
 ## Этап 3 из 3 — полная автоматизация
 
-**Подэтапы 3.1–3.3 completed / завершены в согласованном Core-объёме. Live smoke OpenAI/TinEye/Replicate перенесён в 3.5. Следующий подэтап — 3.4 Production Hardening; он не начат. Автоматизация создаёт только черновики, автопубликации нет.**
+**Подэтапы 3.1–3.4 completed / завершены в согласованном объёме. Live smoke OpenAI/TinEye/Replicate перенесён в 3.5. Следующий подэтап — 3.5 Final Live E2E / Release Readiness; он не начат. Автоматизация создаёт только черновики, автопубликации нет.**
 
 - Полная end-to-end автоматизация от Source и отбора до обработанного материала и публикации.
 - Интеграция с существующими PostDraft / scheduler / publishing без переписывания текущего pipeline.
@@ -166,4 +166,18 @@ Owner acceptance: Stage 3.2 is complete on automated/mocked verification. Real a
 
 Границы готовности: внешние платные/live вызовы не выполнялись; credentials не запрашивались. Live smoke providers и отдельный Telegram photo transfer остаются в 3.5. Discovery providers всё ещё Fake; production Discovery не включается с ними. Бюджеты/quotas, retention и orphan cleanup, сокращение длительных semantic transactions, reconciliation неопределённых внешних результатов и безопасный deployment rollback относятся к 3.4. Exactly-once внешнего платного вызова при потере ответа не заявляется; автоматический replay такого вызова заблокирован. Production-готовность всей цепочки и автопубликация не заявляются.
 
-Подэтап завершён без commit/push. Main и резервный stash@{0} сохранены; .env/session/runtime/credentials не добавлены в изменения. Этап 3.4 не начат.
+Подэтап 3.3 опубликован отдельным commit `79e6c5921b5c376bc78b616ee85482acbdf54217` в feature-ветке. Main и резервный stash@{0} сохранены; .env/session/runtime/credentials и .DS_Store не вошли в commit.
+
+
+## Подэтап 3.4 — Production Hardening
+
+**3.4 completed / завершён по автономным resilience/security и regression проверкам.** [Эксплуатация и ограничения](../architecture/modules/content-hardening.md). 3.3 сначала опубликован через существующий GitHub Desktop после недоступности CLI credentials; remote branch подтверждён на `79e6c5921b5c376bc78b616ee85482acbdf54217`. Изменения 3.4 не закоммичены и не опубликованы.
+
+- Existing Queue/Schedule/checkpoints/cost fences сохранены. Добавлены общие worker slots, recovery maintenance зависших text/video starts и abandoned photo transfers; поздний text result не заменяет terminal recovery status. Remote video ID сохраняется, повторный poll не запускает новую генерацию.
+- Provider HTTP: Redis atomic request/concurrency budgets, учёт каждого retry, circuit cooldown после ошибок, bounded exponential delay. Timeout/5xx платного POST не повторяется автоматически; 429/GET retries ограничены. Missing credentials/Redis deny costly execution без падения всего worker. Video имеет отдельный hourly start budget и pending cap; auto video требует явного opt-in.
+- Migration 31: content_storage_objects — pre-write registry orphan-файлов, deletion tombstones. Cleanup opt-in и dry-run по умолчанию; referenced originals/variants/video/history и любые неизвестные legacy files сохраняются. Срок 30 дней (минимум 7), bounded batches. Reader ACK payload compaction независимо выключен; dedup identities/pending/failed/cache/session не удаляются. HTTP 422 quarantine допускает explicit operator requeue.
+- Monitoring в существующей console: content:status / content:maintain; automation/Discovery counts, last successful processing, queue/failed/abandoned, provider errors/circuit, reader age. Authenticated reader heartbeat не содержит content/account/credentials. /healthz остаётся безопасной DB/Redis liveness. Browser UI не изменялся, новые axe screenshots не требуются; существующие UI/permission/CSRF/cross-workspace feature tests входят в полный suite.
+
+Проверки 3.4: полный PHP suite **2035 tests / 38651 assertions**; целевой resilience/automation/provider набор **80 tests / 350 assertions**. PCOV новых Domain/Integrations classes **85–100%**. Reader **55 автономных tests** + **2 отдельных HTTP contracts**, успешно; failure fixtures подтверждают lost ACK + restart, quarantine/requeue и сохранение dedup identities при retention. PHPStan level 8 + strict rules, Ruff 0.14.1, code style, composer audit, phpDocumentor, migration 31 rollback/replay на app_test с сохранением bytes, /healthz DB/Redis ok — успешно. Контракт: 2 items / 4 messages, 4 image jobs / 8 variants; ACK/restart/repeat без дублей.
+
+Ограничения финальной готовности: реальные provider/Telegram API не вызывались, текущий новый reader heartbeat не подтверждается live (status unknown честно показывается до запуска reader). Реальное скачивание фото, E2E реальных providers, deployment/backup/restore на production инфраструктуре и согласованный release остаются в 3.5. Retention сохраняет referenced промежуточные варианты для audit/history; это не автоматическое удаление старых материалов. Монетарные бюджеты не обещаны: configured request/start caps ограничивают нагрузку, реальные usage/cost metadata требуют live-подтверждения. Неопределённый внешний paid side effect требует ручной reconciliation. Main и stash сохранены; секреты не добавлены. 3.5 не начат.

@@ -341,6 +341,8 @@ return static function (Container $c, string $base): void {
         );
     });
 
+    $c->factory(\App\Integrations\ContentProviders\ProviderHttp::class, static fn (Container $c): \App\Integrations\ContentProviders\ProviderHttp => new \App\Integrations\ContentProviders\ProviderHttp($c->get(HttpClientInterface::class), limits: $c->get(\App\Integrations\ContentProviders\ProviderLimits::class)));
+
     $c->factory(\App\Integrations\Ai\OpenAiResponses::class, static fn (Container $c): \App\Integrations\Ai\OpenAiResponses => new \App\Integrations\Ai\OpenAiResponses($c->get(\App\Integrations\ContentProviders\ProviderHttp::class), $c->get(Config::class)->string('content_providers.openai_key'), $c->get(Config::class)->string('content_providers.openai_model')));
     $c->factory(\App\Integrations\ContentProviders\ReplicateApi::class, static fn (Container $c): \App\Integrations\ContentProviders\ReplicateApi => new \App\Integrations\ContentProviders\ReplicateApi($c->get(\App\Integrations\ContentProviders\ProviderHttp::class), $c->get(Config::class)->string('content_providers.replicate_token')));
     $c->factory(\App\Integrations\Images\TinEyeImageSearchProvider::class, static fn (Container $c): \App\Integrations\Images\TinEyeImageSearchProvider => new \App\Integrations\Images\TinEyeImageSearchProvider($c->get(\App\Integrations\ContentProviders\ProviderHttp::class), $c->get(\App\Integrations\ContentProviders\SafeDownloads::class), $c->get(Config::class)->string('content_providers.tineye_key')));

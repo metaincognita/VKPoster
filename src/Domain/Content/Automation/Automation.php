@@ -29,7 +29,7 @@ use Throwable;
 /** Durable coordinator on the existing Queue: checkpoints, current revision guards, safe restart and draft-only export. */
 final class Automation
 {
-    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly Queue $queue, private readonly WorkspaceRepository $workspaces, private readonly SourceRepository $sources, private readonly MaterialRepository $materials, private readonly SelectionService $selection, private readonly ContentProcessor $text, private readonly ImageWorkflow $images, private readonly VideoWorkflow $videos, private readonly ContentDraftService $drafts, private readonly ContentDiscovery $discovery, private readonly DiscoveryMaterialGateway $gateway, private readonly AutomationGuard $guard)
+    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly Queue $queue, private readonly WorkspaceRepository $workspaces, private readonly SourceRepository $sources, private readonly MaterialRepository $materials, private readonly SelectionService $selection, private readonly ContentProcessor $text, private readonly ImageWorkflow $images, private readonly VideoWorkflow $videos, private readonly ContentDraftService $drafts, private readonly ContentDiscovery $discovery, private readonly DiscoveryMaterialGateway $gateway, private readonly AutomationGuard $guard, private readonly \App\Kernel\Config $operationsConfig)
     {
     }
 
@@ -108,6 +108,18 @@ final class Automation
         if ((int) $this->db->select('SELECT GET_LOCK(?, 0) AS acquired', [$lock])[0]['acquired'] !== 1) {
             return;
         }
+        $slot = null;
+        for ($i = 0; $i < $this->operationsConfig->int('content_operations.concurrency', 2); ++$i) {
+            $name = 'content-worker-slot:' . $i;
+            if ((int) $this->db->select('SELECT GET_LOCK(?, 0) AS acquired', [$name])[0]['acquired'] === 1) {
+                $slot = $name;
+                break;
+            }
+        }
+        if ($slot === null) {
+            $this->db->select('SELECT RELEASE_LOCK(?)', [$lock]);
+            return;
+        }
         try {
             $run = $this->db->table('content_automation_runs')->where('id', '=', $id)->first();
             if ($run === null || !in_array($run['status'], ['pending', 'waiting'], true)) {
@@ -139,6 +151,7 @@ final class Automation
             $this->retry($run);
         } finally {
             $this->db->select('SELECT RELEASE_LOCK(?)', [$lock]);
+            $this->db->select('SELECT RELEASE_LOCK(?)', [$slot]);
         }
     }
 

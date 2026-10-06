@@ -11,7 +11,7 @@ use Symfony\Component\Uid\Ulid;
 /** Private immutable archives and sanitized previews; never re-encode the archive or expose storage keys to the browser. */
 final class ImageFiles
 {
-    public function __construct(private readonly MediaStorage $storage, private readonly ImageProcessor $images)
+    public function __construct(private readonly MediaStorage $storage, private readonly ImageProcessor $images, private readonly ?\App\Domain\Content\Operations\StorageRegistry $registry = null)
     {
     }
 
@@ -44,6 +44,7 @@ final class ImageFiles
                     throw new \RuntimeException('Image read failed');
                 }
                 try {
+                    $this->registry?->track($target);
                     $this->storage->put($target, $stream);
                 } finally {
                     fclose($stream);

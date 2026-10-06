@@ -67,6 +67,10 @@ final class ContentProcessor
             $messages = $this->materials->messages($context, $source, (int) $item['id']);
             $selection = $this->materials->selection($context, $source, (int) $item['id']);
             $stale = !hash_equals($revision, MaterialRepository::revision($item, $messages)) || !hash_equals($attempt['selection_hash'], MaterialRepository::selectionHash($selection)) || ($selection['selection_status'] ?? '') !== 'approved';
+            $prior = $this->db->select('SELECT status FROM source_text_processings WHERE workspace_id=? AND public_id=? FOR UPDATE', [$context->workspaceId, $attempt['public_id']])[0];
+            if ($prior['status'] !== 'processing') {
+                return (string) $prior['status'];
+            }
             $status = $stale ? 'stale' : ($error === null ? 'completed' : 'failed');
             $now = DbTime::format($this->clock->now());
             $this->db->execute('UPDATE source_text_processings SET provider_metadata_json = ?, processed_text = ?, status = ?, error = ?, updated_at = ?, finished_at = ? WHERE workspace_id = ? AND source_id <=> ? AND public_id = ?', [json_encode($metadata, JSON_THROW_ON_ERROR), $output, $status, $stale ? 'Материал или решение отбора изменились. Обработайте актуальную версию.' : $error, $now, $now, $context->workspaceId, $source?->id, $attempt['public_id']]);

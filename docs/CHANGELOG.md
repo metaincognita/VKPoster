@@ -70,3 +70,7 @@ Stage 3.2 is accepted on mocked HTTP/contracts. Real integrations need explicit 
 ## Sources Stage 3.3 — Automation
 
 Optional Source/Radar automation policies, bounded periodic Discovery, existing Queue coordinator with revision checkpoints/recovery/cost guards, manual fallback and ordinary ContentDraftService export. No auto-publishing, external live calls or new provider integration. Migration 30; policy UI and regression tests.
+
+### Sources 3.4 — production hardening
+
+Recovery of interrupted processing, durable orphan registry with opt-in retention, shared provider request/concurrency/video budgets and circuit protection, authenticated reader heartbeat, safe console metrics and outbox quarantine/requeue. No real/live provider calls or publishing changes.

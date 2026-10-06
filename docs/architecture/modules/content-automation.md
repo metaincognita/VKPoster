@@ -43,3 +43,5 @@ docker compose up -d reader
 ```
 
 Не применяйте rollback при активных automation/provider jobs в production. Migration 30 обратима; rollback удаляет automation policies/runs/call fences, поэтому требует остановки workers и координации восстановления перед повторным запуском. Проверки rollback/replay выполняются на app_test.
+
+Hardening 3.4 adds shared concurrency/request budgets, recovery maintenance, opt-in orphan retention and operational metrics: [operations guide](content-hardening.md).

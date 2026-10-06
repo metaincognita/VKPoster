@@ -66,6 +66,10 @@ final class SafeDownloads
             throw $e;
         } catch (\Throwable) {
             throw new ProviderException('download_failed');
+        } finally {
+            if (isset($response)) {
+                $response->getBody()->close();
+            }
         }
     }
     /** @param list<string> $mimes */

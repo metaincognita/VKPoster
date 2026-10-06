@@ -240,3 +240,9 @@ docker compose -f tools/telegram-reader/compose.yaml up -d reader
 ```
 
 Новая команда авторизации не требуется при готовой persistent session. Тесты используют Docker и синтетические фото; `tests/run_php_contract.sh` дополнительно проверяет binary transfer, четыре photo jobs двух Sources, commit/ACK/duplicate и restart на `app_test`. Не запускайте этот contract script одновременно с PHP suite: они используют общую тестовую БД. Live Telegram photo download на этом этапе отдельно не проверялся.
+
+### Hardening 3.4
+
+Each successful Sources cycle reports only an authenticated heartbeat to VKPoster. HTTP 422 events are quarantined as failed while retaining payload/ID; outages/5xx/auth failures stay pending with bounded backoff. `status` reports outbox counts and failed event hashes, never post content. With reader stopped, `outbox-retry --event-id EVENT_SHA256` explicitly requeues one repaired failed event; no Telegram login is invoked.
+
+`READER_ACK_RETENTION_DAYS=0` disables cleanup by default. Set >=7 to compact ACKed payloads older than that many days, up to 100 per cycle; identities, pending/failed records, legacy ACKs, media cache, session and recovery state remain intact. Operations guide: [content hardening](../../docs/architecture/modules/content-hardening.md).

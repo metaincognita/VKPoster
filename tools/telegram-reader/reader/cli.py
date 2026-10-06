@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from .auth import AuthInputError, authenticate
-from .integration import run_sources
+from .integration import Outbox, run_sources
 from .model import channel_username
 from .qr import QRDisplay, authenticate_qr
 from .service import Reader
@@ -116,7 +116,7 @@ def main():
         description="Изолированный read-only Telegram spike"
     )
     parser.add_argument(
-        "command", choices=("login", "login-qr", "smoke", "run", "status", "sources")
+        "command", choices=("login", "login-qr", "smoke", "run", "status", "sources", "outbox-retry")
     )
     parser.add_argument(
         "--qr-port", type=int, default=8765, help="Local QR listener port inside Docker"
@@ -125,6 +125,7 @@ def main():
     parser.add_argument(
         "--source-id", help="Restrict a controlled smoke run to one enabled Source"
     )
+    parser.add_argument("--event-id")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--state", default="/state")
     args = parser.parse_args()
@@ -141,11 +142,18 @@ def main():
                 json.dumps(
                     {
                         **store.summary(),
+                        "outbox": Outbox(store).summary(),
                         "channel_id": store.get("channel_id"),
                         "recovery_gap": store.get("recovery_gap", False),
                     }
                 )
             )
+        elif args.command == "outbox-retry":
+            if not args.event_id or len(args.event_id) != 64 or any(
+                c not in "0123456789abcdef" for c in args.event_id
+            ):
+                raise ValueError("invalid_event_id")
+            print(json.dumps({"requeued": Outbox(store).retry_failed(args.event_id)}))
         elif args.command == "sources":
             asyncio.run(run_sources(args, state, store))
         else:

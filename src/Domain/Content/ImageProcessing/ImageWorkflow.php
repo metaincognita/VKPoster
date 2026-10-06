@@ -46,6 +46,9 @@ final class ImageWorkflow
                 if ($this->db->select("SELECT id FROM source_image_processings WHERE workspace_id = ? AND source_id = ? AND message_id = ? AND revision_hash = ? AND selection_hash = ? AND status = 'queued'", [$context->workspaceId, $source->id, $message['id'], $revision, $selectionHash]) !== []) {
                     continue;
                 }
+                if ((int) $this->db->select("SELECT COUNT(*) AS n FROM source_image_processings WHERE workspace_id=? AND source_id=? AND status='queued'", [$context->workspaceId, $source->id])[0]['n'] >= 50) {
+                    throw new HttpException(429, 'Дождитесь загрузки текущих изображений.');
+                }
                 $now = DbTime::format($this->clock->now());
                 $this->db->table('source_image_processings')->insert(['public_id' => (string) new Ulid(), 'workspace_id' => $context->workspaceId, 'source_id' => $source->id, 'item_id' => $item['id'], 'message_id' => $message['id'], 'telegram_message_id' => $message['message_id'], 'peer_id' => $item['peer_id'], 'telegram_photo_id' => $media['telegram_id'], 'revision_hash' => $revision, 'selection_hash' => $selectionHash, 'created_by' => $context->userId, 'created_at' => $now, 'updated_at' => $now]);
                 ++$count;

@@ -16,7 +16,7 @@ final class ReplicateVideoProvider implements AsyncVideoProvider, ProviderMetada
 {
     /** @var array<string,mixed> */
     private array $details = [];
-    public function __construct(private readonly ReplicateApi $api, private readonly SafeDownloads $downloads, private readonly MediaStorage $storage, private readonly VideoProbe $probe)
+    public function __construct(private readonly ReplicateApi $api, private readonly SafeDownloads $downloads, private readonly MediaStorage $storage, private readonly VideoProbe $probe, private readonly ?\App\Domain\Content\Operations\StorageRegistry $registry = null)
     {
     }
     public function name(): string
@@ -95,6 +95,7 @@ final class ReplicateVideoProvider implements AsyncVideoProvider, ProviderMetada
             }
             $key = 'source-videos/' . $localJobId . '/' . hash('sha256', $bytes);
             try {
+                $this->registry?->track($key);
                 $this->storage->put($key, $stream);
             } finally {
                 fclose($stream);

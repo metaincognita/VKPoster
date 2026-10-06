@@ -48,6 +48,8 @@ try {
         KeyGenerateCommand::class,
         CreateAdminCommand::class,
         AuthPruneCommand::class,
+        \App\Kernel\Console\Command\ContentMaintainCommand::class,
+        \App\Kernel\Console\Command\ContentStatusCommand::class,
         BenchPublishCommand::class,
         BillingGrantCommand::class,
         BillingPlansCommand::class,

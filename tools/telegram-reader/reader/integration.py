@@ -63,6 +63,11 @@ class InternalAPI:
                 raise ValueError("internal_response_limit")
             return json.loads(raw)
 
+    async def heartbeat(self):
+        result = await asyncio.to_thread(self.request, "/internal/reader-heartbeat", {})
+        if result.get("ack") is not True:
+            raise ValueError("invalid_heartbeat_ack")
+
     async def sources(self):
         result = await asyncio.to_thread(self.request, "/internal/sources")
         if result.get("version") != 1 or not isinstance(result.get("sources"), list):
@@ -95,6 +100,48 @@ class Outbox:
                 state TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
                 retry_at REAL NOT NULL DEFAULT 0, error TEXT);
         """)
+
+        columns = {r[1] for r in store.db.execute("PRAGMA table_info(outbox)")}
+        if "acked_at" not in columns:
+            store.db.execute("ALTER TABLE outbox ADD COLUMN acked_at REAL")
+            store.db.commit()
+
+    def summary(self):
+        return {
+            "counts": {
+                r[0]: r[1] for r in self.store.db.execute(
+                    "SELECT state,COUNT(*) FROM outbox GROUP BY state"
+                )
+            },
+            "failed_ids": [r[0] for r in self.store.db.execute(
+                "SELECT event_id FROM outbox WHERE state='failed' LIMIT 10"
+            )],
+        }
+
+    def retry_failed(self, event_id):
+        """Explicit operator requeue after repairing a quarantined event, never automatic."""
+        with self.store.db:
+            return self.store.db.execute(
+                "UPDATE outbox SET state='pending',attempts=0,retry_at=0,error=NULL "
+                "WHERE event_id=? AND state='failed'", (event_id,)
+            ).rowcount
+
+    def compact(self, retention_days=0):
+        """Opt-in acknowledged payload cleanup, retaining event IDs forever for dedup.
+
+        Legacy ACKs without a timestamp and every pending/error event are retained.
+        Message revisions, image cache, session and recovery state are untouched.
+        """
+        if retention_days < 7:
+            return 0
+        cutoff = self.store.clock() - retention_days * 86400
+        with self.store.db:
+            return self.store.db.execute(
+                "UPDATE outbox SET payload='{}' WHERE event_id IN "
+                "(SELECT event_id FROM outbox WHERE state='acked' AND acked_at<? "
+                "AND payload!='{}' LIMIT 100)",
+                (cutoff,),
+            ).rowcount
 
     def enqueue(self, source_id, kind, payload):
         event = {"version": 1, "source_id": source_id, "kind": kind, "payload": payload}
@@ -157,11 +204,12 @@ class Outbox:
                     attempts = row["attempts"] + 1
                     with self.store.db:
                         self.store.db.execute(
-                            "UPDATE outbox SET attempts=?,retry_at=?,error=? WHERE event_id=?",
+                            "UPDATE outbox SET attempts=?,retry_at=?,error=?,state=? WHERE event_id=?",
                             (
                                 attempts,
                                 self.store.clock() + min(300, 2 ** min(attempts, 9)),
                                 type(error).__name__,
+                                "failed" if isinstance(error, urllib.error.HTTPError) and error.code == 422 else "pending",
                                 row["event_id"],
                             ),
                         )
@@ -170,8 +218,8 @@ class Outbox:
                 else:
                     with self.store.db:
                         self.store.db.execute(
-                            "UPDATE outbox SET state='acked',error=NULL WHERE event_id=?",
-                            (row["event_id"],),
+                            "UPDATE outbox SET state='acked',error=NULL,acked_at=? WHERE event_id=?",
+                            (self.store.clock(), row["event_id"]),
                         )
                     delivered += 1
         return delivered
@@ -327,6 +375,8 @@ async def run_sources(args, state, store):
         while True:
             try:
                 count = await worker.tick()
+                await api.heartbeat()
+                worker.outbox.compact(int(os.environ.get("READER_ACK_RETENTION_DAYS", "0")))
                 print(
                     f"sources_cycle active={len(worker.readers)} acked={count}",
                     flush=True,

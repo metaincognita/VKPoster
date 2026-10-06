@@ -21,7 +21,7 @@ use Throwable;
 /** Independent durable video lifecycle: current approved snapshots, immutable bases and guarded final selection. */
 final class VideoWorkflow
 {
-    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly MaterialRepository $materials, private readonly ImageRepository $images, private readonly VideoRepository $repository, private readonly VideoProvider $provider, private readonly AuditLog $audit)
+    public function __construct(private readonly Connection $db, private readonly Clock $clock, private readonly MaterialRepository $materials, private readonly ImageRepository $images, private readonly VideoRepository $repository, private readonly VideoProvider $provider, private readonly AuditLog $audit, private readonly ?\App\Kernel\Config $operationsConfig = null)
     {
     }
 
@@ -73,6 +73,9 @@ final class VideoWorkflow
             $snapshot = $this->snapshot($ctx, $source, $itemId);
             if (!hash_equals($snapshot['revision'], $revision)) {
                 throw new HttpException(409, 'Материал изменился. Обновите страницу.');
+            }
+            if ((int) $this->db->select("SELECT COUNT(*) AS n FROM source_video_generations WHERE workspace_id=? AND status IN ('pending','processing')", [$ctx->workspaceId])[0]['n'] >= ($this->operationsConfig?->int('content_operations.video_pending', 3) ?? 3)) {
+                throw new HttpException(429, 'Дождитесь завершения текущих заданий видео.');
             }
             $basis = $this->basis($ctx, $source, $snapshot, $settings);
             $version = (int) $this->db->select('SELECT COALESCE(MAX(settings_version), 0) AS version FROM source_video_generations WHERE workspace_id = ? AND item_id = ?', [$ctx->workspaceId, $snapshot['item']['id']])[0]['version'] + 1;

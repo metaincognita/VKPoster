@@ -91,6 +91,7 @@ return static function (Router $router): void {
     $router->get('/healthz', [HealthController::class, 'show'])->name('health');
     $router->get('/internal/source-image-jobs', [\App\Http\Controllers\Sources\ImageReaderController::class, 'jobs'])->middleware([RateLimit::class, ['bucket' => 'source-images-list', 'max' => 120, 'seconds' => 60]]);
     $router->post('/internal/source-image-results', [\App\Http\Controllers\Sources\ImageReaderController::class, 'result'])->withoutCsrf()->middleware([RateLimit::class, ['bucket' => 'source-images-results', 'max' => 60, 'seconds' => 60]]);
+    $router->post('/internal/reader-heartbeat', [SourceReaderController::class, 'heartbeat'])->withoutCsrf()->middleware([RateLimit::class, ['bucket' => 'reader-heartbeat', 'max' => 12, 'seconds' => 60]]);
     $router->get('/internal/sources', [SourceReaderController::class, 'sources'])->middleware([RateLimit::class, ['bucket' => 'source-reader-list', 'max' => 120, 'seconds' => 60]]);
     $router->post('/internal/source-events', [SourceReaderController::class, 'event'])->withoutCsrf()->middleware([RateLimit::class, ['bucket' => 'source-reader-events', 'max' => 600, 'seconds' => 60]]);
 

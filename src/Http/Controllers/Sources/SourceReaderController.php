@@ -15,7 +15,7 @@ use Throwable;
 /** Internal HTTP ingress: dedicated bearer secret, bounded payloads, sanitized operational errors and commit-before-ACK. */
 final class SourceReaderController
 {
-    public function __construct(private readonly Config $config, private readonly SourceIngress $ingress, private readonly LoggerInterface $logger)
+    public function __construct(private readonly Config $config, private readonly SourceIngress $ingress, private readonly LoggerInterface $logger, private readonly \App\Support\Heartbeat $heartbeat)
     {
     }
 
@@ -23,6 +23,16 @@ final class SourceReaderController
     {
         $this->authenticate($request);
         return Response::json(['version' => 1, 'sources' => $this->ingress->enabled()])->withHeader('Cache-Control', 'no-store');
+    }
+
+    public function heartbeat(Request $request): Response
+    {
+        $this->authenticate($request);
+        if (strlen($request->rawBody) > 1024) {
+            throw new HttpException(413, 'Too large');
+        }
+        $this->heartbeat->beat('telegram-reader');
+        return Response::json(['ack' => true])->withHeader('Cache-Control', 'no-store');
     }
 
     public function event(Request $request): Response

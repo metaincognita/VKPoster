@@ -14,7 +14,7 @@ final class ProviderHttp
     private readonly Closure $sleep;
     /**
      * @param (Closure(int):void)|null $sleep Delay in microseconds; tests inject a no-op. */
-    public function __construct(private readonly HttpClientInterface $http, ?Closure $sleep = null)
+    public function __construct(private readonly HttpClientInterface $http, ?Closure $sleep = null, private readonly ?ProviderLimits $limits = null)
     {
         $this->sleep = $sleep ?? static function (int $microseconds): void {
             usleep($microseconds);
@@ -25,7 +25,27 @@ final class ProviderHttp
      * @return array<string,mixed> */
     public function json(string $method, string $url, array $options): array
     {
+        $lease = $this->limits?->acquire($method, $url);
+        $failed = true;
+        try {
+            $result = $this->request($method, $url, $options);
+            $failed = false;
+            return $result;
+        } finally {
+            if ($lease !== null) {
+                $this->limits->release($lease, $failed);
+            }
+        }
+    }
+
+    /** @param array<string,mixed> $options
+     * @return array<string,mixed> */
+    private function request(string $method, string $url, array $options): array
+    {
         for ($attempt = 0; $attempt < 3; ++$attempt) {
+            if ($attempt > 0) {
+                $this->limits?->retry($url);
+            }
             try {
                 if ($attempt > 0 && is_array($options['multipart'] ?? null)) {
                     foreach ($options['multipart'] as $part) {
@@ -37,7 +57,7 @@ final class ProviderHttp
                 $response = $this->http->request($method, $url, array_merge($options, ['timeout' => 20, 'connect_timeout' => 5, 'follow_redirects' => false, 'stream' => true]));
             } catch (\Throwable) {
                 if ($method === 'GET' && $attempt < 2) {
-                    ($this->sleep)(250000 * ($attempt + 1));
+                    ($this->sleep)(250000 * (2 ** $attempt));
                     continue;
                 }
                 throw new ProviderException('transport_failed', $method === 'GET');
@@ -51,7 +71,7 @@ final class ProviderHttp
                     if (ctype_digit($retry) && (int) $retry > 2) {
                         throw new ProviderException('rate_limited', true);
                     }
-                    ($this->sleep)(ctype_digit($retry) ? (int) $retry * 1000000 : 250000 * ($attempt + 1));
+                    ($this->sleep)(ctype_digit($retry) ? (int) $retry * 1000000 : 250000 * (2 ** $attempt));
                     continue;
                 }
                 throw new ProviderException($status === 429 ? 'rate_limited' : 'unavailable', true);

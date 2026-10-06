@@ -58,3 +58,5 @@ Stage 3.2 adapters are opt-in via ignored env credentials; Fake remains the defa
 Stage 3.2 is accepted on mocked HTTP/contracts. Real integrations need explicit selection plus corresponding env credentials; absent credentials prevent activation. OpenAI/TinEye/Replicate live smoke is deferred to Stage 3.5; Fake remains the dev/test default.
 
 Stage 3.3 Automation: optional Source/Radar policies, existing minute scheduler/default worker, durable checkpoints and draft-only export. All costly steps default off; missing provider credentials require review without breaking startup. [Operations and limits](docs/architecture/modules/content-automation.md).
+
+Content operations (3.4): `make console CMD="content:status"`, `make console CMD="content:maintain"` (recovery + dry-run retention). Cleanup requires explicit env opt-in; see [hardening](docs/architecture/modules/content-hardening.md).
