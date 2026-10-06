@@ -33,7 +33,7 @@
 
 ## Этап 3 из 3 — полная автоматизация
 
-**Подэтапы 3.1–3.4 completed / завершены в согласованном объёме. Live smoke OpenAI/TinEye/Replicate перенесён в 3.5. Следующий подэтап — 3.5 Final Live E2E / Release Readiness; он не начат. Автоматизация создаёт только черновики, автопубликации нет.**
+**Stage 3 Core completed. Подэтапы 3.1–3.5 завершены в согласованном объёме; весь проект Этапов 1–3 Core completed. Telegram E2E до одного Draft подтверждён live; OpenAI/TinEye/Replicate реализованы и contract-tested, live credentials verification pending. Автоматизация создаёт только черновики, автопубликации нет.**
 
 - Полная end-to-end автоматизация от Source и отбора до обработанного материала и публикации.
 - Интеграция с существующими PostDraft / scheduler / publishing без переписывания текущего pipeline.
@@ -171,7 +171,7 @@ Owner acceptance: Stage 3.2 is complete on automated/mocked verification. Real a
 
 ## Подэтап 3.4 — Production Hardening
 
-**3.4 completed / завершён по автономным resilience/security и regression проверкам.** [Эксплуатация и ограничения](../architecture/modules/content-hardening.md). 3.3 сначала опубликован через существующий GitHub Desktop после недоступности CLI credentials; remote branch подтверждён на `79e6c5921b5c376bc78b616ee85482acbdf54217`. Изменения 3.4 не закоммичены и не опубликованы.
+**3.4 completed / завершён по автономным resilience/security и regression проверкам.** [Эксплуатация и ограничения](../architecture/modules/content-hardening.md). 3.3 сначала опубликован через существующий GitHub Desktop после недоступности CLI credentials; remote branch подтверждён на `79e6c5921b5c376bc78b616ee85482acbdf54217`. Подэтап 3.4 опубликован отдельным commit `c1d416e6676522ee9bd5549d94e1e37de81e59ff` в feature-ветке; main и резервный stash сохранены.
 
 - Existing Queue/Schedule/checkpoints/cost fences сохранены. Добавлены общие worker slots, recovery maintenance зависших text/video starts и abandoned photo transfers; поздний text result не заменяет terminal recovery status. Remote video ID сохраняется, повторный poll не запускает новую генерацию.
 - Provider HTTP: Redis atomic request/concurrency budgets, учёт каждого retry, circuit cooldown после ошибок, bounded exponential delay. Timeout/5xx платного POST не повторяется автоматически; 429/GET retries ограничены. Missing credentials/Redis deny costly execution без падения всего worker. Video имеет отдельный hourly start budget и pending cap; auto video требует явного opt-in.
@@ -180,4 +180,38 @@ Owner acceptance: Stage 3.2 is complete on automated/mocked verification. Real a
 
 Проверки 3.4: полный PHP suite **2035 tests / 38651 assertions**; целевой resilience/automation/provider набор **80 tests / 350 assertions**. PCOV новых Domain/Integrations classes **85–100%**. Reader **55 автономных tests** + **2 отдельных HTTP contracts**, успешно; failure fixtures подтверждают lost ACK + restart, quarantine/requeue и сохранение dedup identities при retention. PHPStan level 8 + strict rules, Ruff 0.14.1, code style, composer audit, phpDocumentor, migration 31 rollback/replay на app_test с сохранением bytes, /healthz DB/Redis ok — успешно. Контракт: 2 items / 4 messages, 4 image jobs / 8 variants; ACK/restart/repeat без дублей.
 
-Ограничения финальной готовности: реальные provider/Telegram API не вызывались, текущий новый reader heartbeat не подтверждается live (status unknown честно показывается до запуска reader). Реальное скачивание фото, E2E реальных providers, deployment/backup/restore на production инфраструктуре и согласованный release остаются в 3.5. Retention сохраняет referenced промежуточные варианты для audit/history; это не автоматическое удаление старых материалов. Монетарные бюджеты не обещаны: configured request/start caps ограничивают нагрузку, реальные usage/cost metadata требуют live-подтверждения. Неопределённый внешний paid side effect требует ручной reconciliation. Main и stash сохранены; секреты не добавлены. 3.5 не начат.
+Ограничения финальной готовности: реальные provider/Telegram API не вызывались, текущий новый reader heartbeat не подтверждается live (status unknown честно показывается до запуска reader). Реальное скачивание фото, E2E реальных providers, deployment/backup/restore на production инфраструктуре и согласованный release остаются в 3.5. Retention сохраняет referenced промежуточные варианты для audit/history; это не автоматическое удаление старых материалов. Монетарные бюджеты не обещаны: configured request/start caps ограничивают нагрузку, реальные usage/cost metadata требуют live-подтверждения. Неопределённый внешний paid side effect требует ручной reconciliation. Main и stash сохранены; секреты не добавлены. Статус последующей финальной проверки 3.5 приведён ниже.
+
+
+## Подэтап 3.5 — Final E2E / Release Readiness (completed)
+
+**3.5 completed. Stage 3 Core completed. Весь проект: Этапы 1–3 Core completed.** Это завершение согласованного Core, без заявления о live-верификации всех внешних providers или production deployment. Новая функциональность не добавлялась. 3.4 опубликован отдельно: `c1d416e6676522ee9bd5549d94e1e37de81e59ff`.
+
+### Реальный Telegram E2E — 2026-10-06
+
+- Существующая persistent session использована без повторной авторизации. Enabled Source @sansillusions в workspace Void получен reader, Telegram канал разрешён и последние реальные сообщения прочитаны. Новый опубликованный владельцем текстовый пост (Telegram message ID 23) доставлен через durable outbox/internal HTTP API с ACK после сохранения.
+- До теста: 9 source_items / 10 source_messages. После импорта: **10 items / 11 messages**. Новый материал id=10 прошёл существующий Selection: при отсутствии правил получил needs_review, затем принят вручную через SelectionService. Предыдущие 9 материалов не переодобрялись.
+- Временно включены только auto text processing (unchanged) и auto draft; semantic/image/video actions не включались. Existing Scheduler/Queue/Automation → ContentProcessor → ContentDraftService → обычный PostService создали **одну text processing version и один обычный PostDraft** со статусом draft. Исходный SourceItem не изменялся. Automation run completed, последний шаг draft, error отсутствует.
+- Повторный запуск reader с сохранённым состоянием и повторные automation ticks после worker restart сохранили те же **10 items / 11 messages / 1 processing version / 1 Draft**. Публикаций **0**. Реальной публичной публикации не было; каналы назначения локально не настроены.
+- В реальном UI Void отображаются 10 материалов; новый материал открывается, ссылка «Открыть черновик» указывает на созданный обычный Draft. Local-only dev login использован для UI-проверки без ввода credentials/автоматического consent. После smoke automation возвращена к выключенным безопасным defaults; worker/scheduler восстановлены. Созданный Draft остаётся доступен пользователю.
+
+### Финальный regression и границы проверки
+
+- Полный PHP suite: **2035 tests / 38651 assertions**, успешно. Fake Discovery → Radar → Selection → Processing → Draft проверен на синтетических fixtures, это не live-интернет Discovery. Telegram/VK/MAX adapters проверены через mocked HTTP в существующей цепочке PostDraft → PostService → Scheduler → Queue → Publisher. Параллельного publishing pipeline нет.
+- Failure/recovery: duplicate events, lost ACK после commit, reader/worker restart, повторный automation run, stale/new revision guards, missing credentials, provider timeout/429/500/unavailable, retry и сохранение remote video job ID покрыты автономными/contract тестами. Реальные платные provider вызовы не выполнялись.
+- Reader: **55 автономных tests** + **2 отдельных HTTP contracts**, успешно (в discover 57 tests с двумя отдельно выполняемыми contracts skipped). HTTP fixtures: 2 items / 4 messages и photo transfer 4 jobs / 8 variants, dimensions/SHA-256/ACK/restart/dedup. Telegram photo download в Image Processing отдельно live не проверялся; текущий live E2E использовал текстовый пост.
+- PHPStan level 8 + strict rules, Ruff 0.14.1, code style, composer audit (0 advisories), CSS freshness, migrations и rollback/replay tests — успешно. Локально Nothing to migrate; /healthz DB/Redis ok. Final documentation-only changes проходят git diff --check.
+- UI/axe: isolated app_test PHP-FPM/nginx, **5 страниц / 30 screenshots** (375/768/1440 × light/dark), axe 360/1440px: нет serious/critical violations или horizontal overflow. Проверены Source, Radar, Source/Discovery material, обычный Draft editor. Screenshots просмотрены. Fake destination включён только на тестовом UI-стенде; временные контейнеры удалены.
+- Security/secret scan: credentials, .env, Telegram session/phone/API ID/API hash/2FA, internal secrets, runtime SQLite и временные файлы не включены. Изменённые tracked .DS_Store исключены из commit. Main и stash@{0} сохранены.
+
+### Реальные внешние проверки: pending
+
+Все адаптеры ниже: **implemented + contract-tested, live credentials verification pending**. Fake providers сохранены для dev/tests, production Discovery с Fake запрещён.
+
+- OpenAI live (Text Processing + Semantic Selection/Ranking).
+- TinEye live (image search).
+- Replicate enhancement live.
+- Replicate video generation live.
+- Реальные production credentials и публикация VK/MAX/Telegram/других каналов назначения.
+
+Ключи не запрашивались, платные API не вызывались. Эти внешние live-проверки не блокируют завершение Stage 3 Core. Production rollout и публичная публикация требуют отдельного разрешения; автоматическая публикация из Sources в этом проекте не включалась.
